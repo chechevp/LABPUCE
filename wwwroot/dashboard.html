@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Inventario - PUCE Labs</title>
+    <link rel="stylesheet" href="css/styles.css">
+    
+    <!-- Flatpickr for Visual Datepicker -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://npmcdn.com/flatpickr/dist/themes/dark.css">
+</head>
+<body>
+    <div class="dashboard-wrapper">
+        <!-- Navigation bar (Top) -->
+        <nav class="navbar glass-panel" style="border-radius: 0; z-index: 10;">
+            <a href="#" class="navbar-brand">
+                PUCE <span>LABS</span>
+            </a>
+            
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div class="notifications-wrapper" id="notificationsWrapper">
+                    <button class="btn btn-icon notification-btn" id="notificationBtn" onclick="toggleNotifications()">
+                        🔔<span class="notification-badge" id="notificationBadge" style="display: none;">0</span>
+                    </button>
+                    <div class="notifications-dropdown glass-panel" id="notificationsDropdown" style="display: none;">
+                        <div class="notifications-header">
+                            <h4>Notificaciones</h4>
+                            <button class="btn-text" onclick="marcarTodasComoLeidas()">Leídas</button>
+                        </div>
+                        <div class="notifications-list" id="notificationsList">
+                            <div class="notification-item empty">No tienes notificaciones.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="user-badge" id="userBadge">
+                <div class="badge-text">
+                    <div class="badge-name" id="userNameLabel">Cargando...</div>
+                    <div class="badge-role" id="userRoleLabel">...</div>
+                </div>
+                <button onclick="handleLogout()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem;">
+                    Cerrar Sesión
+                </button>
+                </div>
+            </div>
+        </nav>
+
+        <div class="dashboard-body">
+            <!-- Sidebar -->
+            <aside class="sidebar glass-panel" id="sidebar">
+                <ul class="sidebar-menu">
+                    <li class="sidebar-item active" id="menu-inventory" onclick="showSection('section-inventory', this)">
+                        <span>📦</span> <span class="sidebar-text">Catálogo / Inventario</span>
+                    </li>
+                    <li class="sidebar-item" id="menu-requests" onclick="showSection('section-requests', this)" style="display: none;">
+                        <span>📋</span> <span class="sidebar-text">Solicitudes Préstamo</span>
+                    </li>
+                    <li class="sidebar-item" id="menu-returns" onclick="showSection('section-returns', this)" style="display: none;">
+                        <span>📥</span> <span class="sidebar-text">Solicitudes Devolución</span>
+                    </li>
+                    <li class="sidebar-item" id="menu-history" onclick="showSection('section-history', this)" style="display: none;">
+                        <span>🕰️</span> <span class="sidebar-text">Historial General</span>
+                    </li>
+                    <li class="sidebar-item" id="menu-student-history" onclick="showSection('section-student-history', this)" style="display: none;">
+                        <span>🕰️</span> <span class="sidebar-text">Mi Historial</span>
+                    </li>
+                </ul>
+            </aside>
+
+            <!-- Main Workspace -->
+            <main class="main-content">
+                <!-- INVENTORY SECTION -->
+                <section id="section-inventory" class="content-section active-section">
+                    <header class="page-header">
+                        <div>
+                            <h1 class="page-title" id="dashboardTitle">Catálogo de Equipos</h1>
+                            <p class="page-subtitle" id="dashboardSubtitle">Consulta y verificación de stock disponible en tiempo real</p>
+                        </div>
+                        <button onclick="openCreateModal()" class="btn btn-primary" id="addBtn" style="display: none;">
+                            + Registrar Elemento
+                        </button>
+                    </header>
+
+                    <div class="control-bar glass-panel" style="padding: 16px;">
+                        <div class="search-wrapper">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="searchInput" class="form-control search-input" placeholder="Buscar por nombre o descripción..." oninput="filterItems()">
+                        </div>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <select id="categoryFilter" class="form-control" style="width: auto; min-width: 180px;" onchange="filterItems()">
+                                <option value="">Todas las Categorías</option>
+                            </select>
+                            <div id="lowStockWidget" style="display: none; align-items: center; background: rgba(244, 67, 54, 0.1); color: var(--color-danger); padding: 0 15px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; border: 1px solid rgba(244, 67, 54, 0.2);">
+                                ⚠️ Elementos con Stock Bajo: <span id="lowStockCount" style="margin-left: 5px; font-size: 1.1rem;">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid-container" id="inventoryGrid">
+                        <!-- Loaded dynamically -->
+                    </div>
+                    
+                    <div id="emptyState" style="display: none; text-align: center; padding: 40px;" class="glass-panel">
+                        <p style="color: var(--text-secondary);">No se encontraron elementos que coincidan con la búsqueda.</p>
+                    </div>
+                </section>
+
+                <!-- REQUESTS SECTION -->
+                <section id="section-requests" class="content-section">
+                    <header class="page-header">
+                        <div>
+                            <h1 class="page-title">Solicitudes de Préstamo</h1>
+                            <p class="page-subtitle">Acepta o rechaza reservas de préstamos de estudiantes</p>
+                        </div>
+                    </header>
+                    <div id="requestsContainer" class="grid-container">
+                        <!-- Loaded dynamically -->
+                    </div>
+                </section>
+
+                <!-- RETURNS SECTION -->
+                <section id="section-returns" class="content-section">
+                    <header class="page-header">
+                        <div>
+                            <h1 class="page-title">Solicitudes de Devolución</h1>
+                            <p class="page-subtitle">Gestiona las entregas de equipos reportadas por los estudiantes</p>
+                        </div>
+                    </header>
+                    <div id="returnsContainer" class="grid-container">
+                        <!-- Loaded dynamically -->
+                    </div>
+                </section>
+
+                <!-- ADMIN HISTORY SECTION -->
+                <section id="section-history" class="content-section">
+                    <header class="page-header">
+                        <div>
+                            <h1 class="page-title">Historial de Préstamos</h1>
+                            <p class="page-subtitle">Registro histórico de aprobaciones, devoluciones y bajas.</p>
+                        </div>
+                    </header>
+                    <div class="glass-panel" style="padding: 16px; margin-bottom: 20px;">
+                        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                            <input type="date" id="adminHistoryDateFilter" class="form-control" style="flex: 1; min-width: 150px;" onchange="filterHistory()">
+                            <select id="adminHistoryStatusFilter" class="form-control" style="flex: 1; min-width: 150px;" onchange="filterHistory()">
+                                <option value="">Todos los Estados</option>
+                                <option value="APROBADO">Aprobados</option>
+                                <option value="PENDIENTE_DEVOLUCION">Devolución Pendiente</option>
+                                <option value="DEVUELTO">Devueltos</option>
+                                <option value="RECHAZADO">Rechazados</option>
+                            </select>
+                            <input type="text" id="adminHistoryStudentFilter" class="form-control" placeholder="Buscar por estudiante o código..." style="flex: 2; min-width: 200px;" oninput="filterHistory()">
+                        </div>
+                    </div>
+                    <div class="glass-panel" style="padding: 16px; overflow-x: auto;">
+                         <table style="width: 100%; color: var(--text-primary); border-collapse: collapse; text-align: left;">
+                             <thead>
+                                 <tr style="border-bottom: 1px solid var(--border-color);">
+                                     <th style="padding: 10px;">Código</th>
+                                     <th style="padding: 10px;">Estudiante</th>
+                                     <th style="padding: 10px;">Item</th>
+                                     <th style="padding: 10px;">Cantidad</th>
+                                     <th style="padding: 10px;">Estado</th>
+                                     <th style="padding: 10px;">Acciones</th>
+                                 </tr>
+                             </thead>
+                             <tbody id="historyTableBody">
+                                 <!-- Loaded dynamically -->
+                             </tbody>
+                         </table>
+                    </div>
+                </section>
+
+                <!-- STUDENT HISTORY SECTION -->
+                <section id="section-student-history" class="content-section">
+                    <header class="page-header">
+                        <div>
+                            <h1 class="page-title">Mi Historial</h1>
+                            <p class="page-subtitle">Mis préstamos pasados y activos</p>
+                        </div>
+                    </header>
+                    <div class="glass-panel" style="padding: 16px; margin-bottom: 20px;">
+                        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                            <input type="date" id="studentHistoryDateFilter" class="form-control" style="flex: 1; min-width: 150px;" onchange="filterStudentHistory()">
+                            <select id="studentHistoryStatusFilter" class="form-control" style="flex: 1; min-width: 150px;" onchange="filterStudentHistory()">
+                                <option value="">Todos los Estados</option>
+                                <option value="APROBADO">Aprobados</option>
+                                <option value="PENDIENTE_DEVOLUCION">Devolución Pendiente</option>
+                                <option value="DEVUELTO">Devueltos</option>
+                                <option value="RECHAZADO">Rechazados</option>
+                                <option value="PENDIENTE">En revisión</option>
+                            </select>
+                            <input type="text" id="studentHistoryItemFilter" class="form-control" placeholder="Buscar por nombre de ítem o código..." style="flex: 2; min-width: 200px;" oninput="filterStudentHistory()">
+                        </div>
+                    </div>
+                    <div class="glass-panel" style="padding: 16px; overflow-x: auto;">
+                         <table style="width: 100%; color: var(--text-primary); border-collapse: collapse; text-align: left;">
+                             <thead>
+                                 <tr style="border-bottom: 1px solid var(--border-color);">
+                                     <th style="padding: 10px;">Código</th>
+                                     <th style="padding: 10px;">Item</th>
+                                     <th style="padding: 10px;">Cantidad</th>
+                                     <th style="padding: 10px;">Fecha Préstamo</th>
+                                     <th style="padding: 10px;">Estado</th>
+                                     <th style="padding: 10px;">Acciones</th>
+                                 </tr>
+                             </thead>
+                             <tbody id="studentHistoryTableBody">
+                                 <!-- Loaded dynamically -->
+                             </tbody>
+                         </table>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <!-- Create/Edit Modal -->
+    <div class="modal-overlay" id="itemModal">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3 id="modalTitle">Agregar Nuevo Elemento</h3>
+                <button onclick="closeItemModal()" class="modal-close">&times;</button>
+            </div>
+            <div id="modalAlert" class="alert alert-danger" style="margin-bottom: 15px;"></div>
+            
+            <form id="itemForm" onsubmit="handleFormSubmit(event)">
+                <input type="hidden" id="itemId">
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="form-group">
+                        <label for="itemCode" class="form-label">Codificación Única *</label>
+                        <input type="text" id="itemCode" class="form-control" placeholder="Ej: DEV-ESP32-001" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="itemName" class="form-label">Nombre del Elemento *</label>
+                        <input type="text" id="itemName" class="form-control" placeholder="Ej: Placa ESP32" required>
+                    </div>
+                </div>
+
+
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="form-group">
+                        <label for="itemBrand" class="form-label">Marca</label>
+                        <input type="text" id="itemBrand" class="form-control" placeholder="Ej: Espressif">
+                    </div>
+                    <div class="form-group">
+                        <label for="itemModel" class="form-label">Modelo</label>
+                        <input type="text" id="itemModel" class="form-control" placeholder="Ej: WROOM-32D">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="itemSerial" class="form-label">Número de Serie</label>
+                    <input type="text" id="itemSerial" class="form-control" placeholder="Ej: SN-90812">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="form-group">
+                        <label for="itemCategory" class="form-label">Categoría *</label>
+                        <select id="itemCategory" class="form-control" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="itemSpace" class="form-label">Ubicación Física *</label>
+                        <select id="itemSpace" class="form-control" required></select>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="form-group" id="cantidadGroup">
+                        <label for="itemCantidad" class="form-label">Stock Actual (Inicial) *</label>
+                        <input type="number" id="itemCantidad" class="form-control" value="1" min="1" required>
+                    </div>
+                    <div class="form-group" id="stockMinimoGroup">
+                        <label for="itemStockMinimo" class="form-label">Stock Mínimo *</label>
+                        <input type="number" id="itemStockMinimo" class="form-control" value="1" min="1" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="itemDescription" class="form-label">Descripción Técnica</label>
+                    <textarea id="itemDescription" class="form-control" rows="2" placeholder="Especificaciones, pines, etc."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="itemObservations" class="form-label">Observaciones</label>
+                    <textarea id="itemObservations" class="form-control" rows="2" placeholder="Ej: Con estuche protector."></textarea>
+                </div>
+
+                <div class="form-group" style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                    <label class="form-label" style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="itemIsPublic" checked style="width: auto;">
+                        Visible para estudiantes (Público)
+                    </label>
+                    <small style="color: var(--text-secondary);">Desmarca esta opción para ocultar el equipo del catálogo estudiantil.</small>
+                </div>
+
+                <div class="form-group" style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                    <label for="itemImage" class="form-label">Foto del Elemento (Opcional)</label>
+                    <input type="file" id="itemImage" class="form-control" accept="image/png, image/jpeg, image/gif, image/webp">
+                    <small style="color: var(--text-secondary);">Máximo 5MB.</small>
+                    <input type="hidden" id="itemImageUrl">
+                    <div id="itemImagePreviewContainer" style="margin-top: 10px; display: none;">
+                        <img id="itemImagePreview" src="" alt="Vista previa" style="max-width: 100%; max-height: 200px; border-radius: 8px; border: 1px solid var(--border-color);">
+                        <br><button type="button" class="btn btn-secondary" onclick="removeImage('itemImage', 'itemImageUrl', 'itemImagePreviewContainer')" style="margin-top: 5px; padding: 4px 8px; font-size: 0.8rem;">Quitar foto</button>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
+                    <button type="button" onclick="closeItemModal()" class="btn btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="saveBtn">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Loan Request Modal (Estudiante) -->
+    <div class="modal-overlay" id="loanModal">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3>Solicitar Préstamo</h3>
+                <button onclick="closeLoanModal()" class="modal-close">&times;</button>
+            </div>
+            <div id="loanAlert" class="alert alert-danger" style="margin-bottom: 15px;"></div>
+            
+            <form id="loanForm" onsubmit="handleLoanSubmit(event)">
+                <input type="hidden" id="loanItemName">
+                
+                <div class="form-group">
+                    <label class="form-label">Elemento a solicitar:</label>
+                    <p id="loanItemDisplayName" style="font-weight: bold; margin-bottom: 10px;"></p>
+                </div>
+
+                <div class="form-group">
+                    <label for="loanQuantity" class="form-label">Cantidad *</label>
+                    <input type="number" id="loanQuantity" class="form-control" min="1" required>
+                    <small id="loanMaxStock" style="color: var(--text-secondary);"></small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="loanReturnDate" class="form-label">Fecha de Devolución *</label>
+                    <input type="date" id="loanReturnDate" class="form-control" required>
+                    <small style="color: var(--text-secondary);">El tiempo de préstamo predeterminado es de 2 días.</small>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
+                    <button type="button" onclick="closeLoanModal()" class="btn btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="confirmLoanBtn">Confirmar Solicitud</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Request Details Modal (Admin) -->
+    <div class="modal-overlay" id="requestDetailsModal">
+        <div class="modal-content glass-panel" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3>Detalles de la Solicitud</h3>
+                <button onclick="closeRequestDetailsModal()" class="modal-close">&times;</button>
+            </div>
+            
+            <div id="reqDetContent" style="margin-bottom: 20px; font-size: 0.95rem; line-height: 1.6;">
+                <!-- Filled dynamically via JS -->
+            </div>
+            
+            <div class="form-group" id="reqDetRejectGroup" style="border-top: 1px solid var(--border-color); padding-top: 15px;">
+                <label for="reqDetComment" class="form-label">Comentario Administrativo (Opcional si rechaza)</label>
+                <textarea id="reqDetComment" class="form-control" rows="2" placeholder="Escribe la razón aquí..."></textarea>
+            </div>
+            
+            <div style="display: flex; justify-content: flex-end; gap: 12px;">
+                <button type="button" class="btn btn-secondary" onclick="closeRequestDetailsModal()">Cerrar</button>
+                <button type="button" class="btn btn-danger" id="reqDetBtnRechazar">Rechazar Solicitud</button>
+                <button type="button" class="btn btn-primary" id="reqDetBtnAprobar" style="background: var(--color-success); border-color: var(--color-success);">Aprobar Préstamo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Details Modal (Admin) -->
+    <div class="modal-overlay" id="historyDetailsModal">
+        <div class="modal-content glass-panel" style="max-width: 550px;">
+            <div class="modal-header">
+                <h3>Detalles del Préstamo</h3>
+                <button onclick="closeHistoryDetailsModal()" class="modal-close">&times;</button>
+            </div>
+            
+            <div id="histDetContent" style="margin-bottom: 20px; font-size: 0.95rem; line-height: 1.6;">
+                <!-- Filled dynamically via JS -->
+            </div>
+            
+            <div class="form-group" id="histDetCantGroup" style="border-top: 1px solid var(--border-color); padding-top: 15px; display: none;">
+                <label for="histDetCantDefectuosa" class="form-label" style="color: var(--color-danger);">Cantidad de Elementos Defectuosos</label>
+                <input type="number" id="histDetCantDefectuosa" class="form-control" value="0" min="0">
+                <small style="color: var(--text-secondary);">Dejar en 0 si todos regresan en buen estado.</small>
+            </div>
+
+            <div class="form-group" id="histDetCommentGroup" style="display: none; margin-top: 15px;">
+                <label for="histDetComment" class="form-label">Comentario sobre la devolución (Obligatorio si hay defectuosos)</label>
+                <textarea id="histDetComment" class="form-control" rows="2" placeholder="Describe cualquier novedad en la recepción..."></textarea>
+            </div>
+            
+            <div class="form-group" id="histDetImageGroup" style="display: none; margin-top: 15px;">
+                <label for="histDetImage" class="form-label">Evidencia Fotográfica (Opcional)</label>
+                <input type="file" id="histDetImage" class="form-control" accept="image/png, image/jpeg, image/gif, image/webp">
+                <small style="color: var(--text-secondary);">Máximo 5MB. Adjunta una foto si el elemento presenta daños.</small>
+            </div>
+            
+            <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
+                <button type="button" class="btn btn-secondary" onclick="closeHistoryDetailsModal()">Cerrar</button>
+                <button type="button" class="btn btn-danger" id="histDetBtnRechazar" style="display: none;">Rechazar Devolución</button>
+                <button type="button" class="btn btn-primary" id="histDetBtnConfirmar" style="display: none; background: var(--color-success); border-color: var(--color-success);">Confirmar Devolución</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Stock Modal -->
+    <div class="modal-overlay" id="addStockModal">
+        <div class="modal-content glass-panel" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Agregar Stock</h3>
+                <button onclick="closeAddStockModal()" class="modal-close">&times;</button>
+            </div>
+            
+            <div class="form-group" style="margin-top: 15px;">
+                <label for="addStockAmount" class="form-label">Cantidad a ingresar</label>
+                <input type="number" id="addStockAmount" class="form-control" value="1" min="1" required>
+                <input type="hidden" id="addStockItemId">
+            </div>
+            
+            <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
+                <button type="button" class="btn btn-secondary" onclick="closeAddStockModal()">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="confirmAgregarStock()">Agregar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Repair Stock Modal -->
+    <div class="modal-overlay" id="repairStockModal">
+        <div class="modal-content glass-panel" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3 style="color: var(--color-warning);">Reparar Elementos</h3>
+                <button onclick="closeRepairStockModal()" class="modal-close">&times;</button>
+            </div>
+            
+            <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 15px;">
+                Indica cuántos elementos defectuosos han sido reparados y pueden volver al inventario general.
+            </p>
+
+            <div class="form-group" style="margin-top: 15px;">
+                <label for="repairStockAmount" class="form-label">Cantidad a reparar</label>
+                <input type="number" id="repairStockAmount" class="form-control" value="1" min="1" required>
+                <input type="hidden" id="repairStockItemId">
+            </div>
+            
+            <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
+                <button type="button" class="btn btn-secondary" onclick="closeRepairStockModal()">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="confirmarReparacion()" style="background: var(--color-warning); border-color: var(--color-warning); color: #000;">Reparar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script assets loader -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/es.js"></script>
+    <script src="js/app.js?v=2.4"></script>
+</body>
+</html>
