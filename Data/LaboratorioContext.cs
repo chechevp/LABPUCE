@@ -21,6 +21,7 @@ namespace LaboratorioPUCE.Data
         public DbSet<SesionUsuario> SesionesUsuario => Set<SesionUsuario>();
         public DbSet<LaboratorioPUCE.Core.Entities.Prestamo> Prestamos => Set<LaboratorioPUCE.Core.Entities.Prestamo>();
         public DbSet<LaboratorioPUCE.Core.Entities.Notificacion> Notificaciones => Set<LaboratorioPUCE.Core.Entities.Notificacion>();
+        public DbSet<LaboratorioPUCE.Models.LogTransaccion> LogsTransacciones => Set<LaboratorioPUCE.Models.LogTransaccion>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -44,12 +45,14 @@ namespace LaboratorioPUCE.Data
             // Seed Roles
             modelBuilder.Entity<Rol>().HasData(
                 new Rol { RolId = 1, Nombre = "Administrador", Descripcion = "Control operativo total y administración", NivelAcceso = 10, Activo = 1 },
-                new Rol { RolId = 2, Nombre = "Estudiante", Descripcion = "Consulta pública y reserva virtual", NivelAcceso = 1, Activo = 1 }
+                new Rol { RolId = 2, Nombre = "Estudiante", Descripcion = "Consulta pública y reserva virtual", NivelAcceso = 1, Activo = 1 },
+                new Rol { RolId = 3, Nombre = "Docente", Descripcion = "Aprobar/rechazar devoluciones e historial", NivelAcceso = 5, Activo = 1 }
             );
 
             // Hash passwords for seed users
             var adminPasswordHash = HashPassword("AdminPass123!");
             var studentPasswordHash = HashPassword("StudentPass123!");
+            var docentePasswordHash = HashPassword("DocentePass123!");
 
             // Seed Users
             modelBuilder.Entity<Usuario>().HasData(
@@ -78,6 +81,19 @@ namespace LaboratorioPUCE.Data
                     Activo = 1,
                     FechaCreacion = new DateTime(2026, 6, 1),
                     PasswordHash = studentPasswordHash
+                },
+                new Usuario
+                {
+                    UsuarioId = 3,
+                    Correo = "docente@pucesa.edu.ec",
+                    Nombre = "María",
+                    Apellido = "Gómez",
+                    Cedula = "1809876543",
+                    RolId = 3,
+                    CarreraMateria = "Sistemas",
+                    Activo = 1,
+                    FechaCreacion = new DateTime(2026, 6, 1),
+                    PasswordHash = docentePasswordHash
                 }
             );
 

@@ -62,8 +62,21 @@
                     <li class="sidebar-item" id="menu-history" onclick="showSection('section-history', this)" style="display: none;">
                         <span>🕰️</span> <span class="sidebar-text">Historial General</span>
                     </li>
+                    <li class="sidebar-item" id="menu-categories" onclick="showSection('section-categories', this)" style="display: none;">
+                        <span>🏷️</span> <span class="sidebar-text">Admin. Categorías</span>
+                    </li>
+                    <li class="sidebar-item" id="menu-audit" onclick="showSection('section-audit', this)" style="display: none;">
+                        <span>📜</span> <span class="sidebar-text">Auditoría / Logs</span>
+                    </li>
                     <li class="sidebar-item" id="menu-student-history" onclick="showSection('section-student-history', this)" style="display: none;">
                         <span>🕰️</span> <span class="sidebar-text">Mi Historial</span>
+                    </li>
+                    <li class="sidebar-item" id="menu-bloqueados" onclick="showSection('section-bloqueados', this)" style="display: none;">
+                        <span class="icon">🚫</span>
+                        <span>Estudiantes Bloqueados</span>
+                    </li>
+                    <li class="sidebar-item" id="menu-stats" onclick="showSection('section-stats', this)" style="display: none;">
+                        <span>📊</span> <span class="sidebar-text">Estadísticas</span>
                     </li>
                 </ul>
             </aside>
@@ -172,6 +185,33 @@
                     </div>
                 </section>
 
+                <!-- CATEGORIES SECTION -->
+                <section id="section-categories" class="content-section">
+                    <header class="page-header">
+                        <div>
+                            <h1 class="page-title">Administración de Categorías</h1>
+                            <p class="page-subtitle">Gestiona las clasificaciones del inventario.</p>
+                        </div>
+                        <button onclick="openCategoryModal()" class="btn btn-primary" id="addCategoryBtn">
+                            + Nueva Categoría
+                        </button>
+                    </header>
+                    <div class="glass-panel" style="padding: 16px; overflow-x: auto;">
+                         <table style="width: 100%; color: var(--text-primary); border-collapse: collapse; text-align: left;">
+                             <thead>
+                                 <tr style="border-bottom: 1px solid var(--border-color);">
+                                     <th style="padding: 10px;">ID</th>
+                                     <th style="padding: 10px;">Nombre</th>
+                                     <th style="padding: 10px;">Acciones</th>
+                                 </tr>
+                             </thead>
+                             <tbody id="categoriesTableBody">
+                                 <!-- Loaded dynamically -->
+                             </tbody>
+                         </table>
+                    </div>
+                </section>
+
                 <!-- STUDENT HISTORY SECTION -->
                 <section id="section-student-history" class="content-section">
                     <header class="page-header">
@@ -212,6 +252,88 @@
                          </table>
                     </div>
                 </section>
+
+                <!-- Section: Audit Logs -->
+                <section id="section-audit" class="content-section">
+                    <div class="view-header">
+                        <h2>Registro de Auditoría</h2>
+                        <p>Historial de transacciones y modificaciones de inventario.</p>
+                        <button onclick="fetchAuditLogs()" class="btn btn-secondary">🔄 Recargar Logs</button>
+                    </div>
+                    <div class="glass-panel" style="padding: 20px; overflow-x: auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha y Hora</th>
+                                    <th>Usuario</th>
+                                    <th>Acción</th>
+                                    <th>Detalle / Motivo</th>
+                                    <th>Ref ID</th>
+                                </tr>
+                            </thead>
+                            <tbody id="auditTableBody">
+                                <tr><td colspan="5" style="text-align:center;">Cargando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- STATS SECTION -->
+                <section id="section-stats" class="content-section">
+                    <header class="page-header">
+                        <div>
+                            <h1 class="page-title">Estadísticas</h1>
+                            <p class="page-subtitle">Visualización de devoluciones completadas</p>
+                        </div>
+                        <button onclick="fetchEstadisticas()" class="btn btn-secondary">
+                            🔄 Actualizar
+                        </button>
+                    </header>
+                    
+                    <div class="control-bar glass-panel" style="padding: 16px; margin-top: 15px; display: flex; gap: 15px; align-items: center;">
+                        <label for="statsTypeSelector" style="font-weight: 500;">Seleccionar Vista:</label>
+                        <select id="statsTypeSelector" class="form-control" style="width: 250px;" onchange="renderSelectedStatistic()">
+                            <option value="elemento">Por Elemento</option>
+                            <option value="categoria">Por Categoría</option>
+                            <option value="fecha">Evolución por Fecha</option>
+                            <option value="estudiante" id="optStatEstudiante" style="display:none;">Por Estudiante</option>
+                        </select>
+                    </div>
+
+                    <div class="glass-panel" style="padding: 20px; margin-top: 20px; min-height: 500px; display: flex; align-items: center; justify-content: center;">
+                        <canvas id="mainStatsChart" style="max-height: 550px; width: 100%;"></canvas>
+                    </div>
+                </section>
+
+                <!-- BLOQUEADOS SECTION -->
+                <section id="section-bloqueados" class="content-section">
+                    <header class="page-header">
+                        <div>
+                            <h1 class="page-title">Estudiantes Bloqueados</h1>
+                            <p class="page-subtitle">Alumnos con devoluciones atrasadas</p>
+                        </div>
+                        <button onclick="fetchBloqueados()" class="btn btn-secondary">
+                            🔄 Actualizar
+                        </button>
+                    </header>
+                    
+                    <div class="glass-panel" style="margin-top: 20px; overflow-x: auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Estudiante</th>
+                                    <th>Correo</th>
+                                    <th>Préstamos Atrasados</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bloqueadosTableBody">
+                                <tr><td colspan="4" style="text-align:center;">Cargando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
             </main>
         </div>
     </div>
@@ -231,7 +353,7 @@
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                     <div class="form-group">
                         <label for="itemCode" class="form-label">Codificación Única *</label>
-                        <input type="text" id="itemCode" class="form-control" placeholder="Ej: DEV-ESP32-001" required>
+                        <input type="text" id="itemCode" class="form-control" placeholder="Autogenerado al elegir categoría" required readonly style="background: rgba(255,255,255,0.05); color: var(--color-warning); font-weight: bold; font-size: 1.1rem; border: 1px solid var(--color-warning);">
                     </div>
                     <div class="form-group">
                         <label for="itemName" class="form-label">Nombre del Elemento *</label>
@@ -268,17 +390,6 @@
                     </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                    <div class="form-group" id="cantidadGroup">
-                        <label for="itemCantidad" class="form-label">Stock Actual (Inicial) *</label>
-                        <input type="number" id="itemCantidad" class="form-control" value="1" min="1" required>
-                    </div>
-                    <div class="form-group" id="stockMinimoGroup">
-                        <label for="itemStockMinimo" class="form-label">Stock Mínimo *</label>
-                        <input type="number" id="itemStockMinimo" class="form-control" value="1" min="1" required>
-                    </div>
-                </div>
-
                 <div class="form-group">
                     <label for="itemDescription" class="form-label">Descripción Técnica</label>
                     <textarea id="itemDescription" class="form-control" rows="2" placeholder="Especificaciones, pines, etc."></textarea>
@@ -287,14 +398,6 @@
                 <div class="form-group">
                     <label for="itemObservations" class="form-label">Observaciones</label>
                     <textarea id="itemObservations" class="form-control" rows="2" placeholder="Ej: Con estuche protector."></textarea>
-                </div>
-
-                <div class="form-group" style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
-                    <label class="form-label" style="display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="itemIsPublic" checked style="width: auto;">
-                        Visible para estudiantes (Público)
-                    </label>
-                    <small style="color: var(--text-secondary);">Desmarca esta opción para ocultar el equipo del catálogo estudiantil.</small>
                 </div>
 
                 <div class="form-group" style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
@@ -316,38 +419,77 @@
         </div>
     </div>
 
-    <!-- Loan Request Modal (Estudiante) -->
-    <div class="modal-overlay" id="loanModal">
-        <div class="modal-content glass-panel">
+    <!-- Modal para Añadir al Carrito (Selección de Cantidad) -->
+    <div class="modal-overlay" id="addToCartModal">
+        <div class="modal-content glass-panel" style="max-width: 400px;">
             <div class="modal-header">
-                <h3>Solicitar Préstamo</h3>
-                <button onclick="closeLoanModal()" class="modal-close">&times;</button>
+                <h3>Agregar al Carrito</h3>
+                <button onclick="closeAddToCartModal()" class="modal-close">&times;</button>
             </div>
-            <div id="loanAlert" class="alert alert-danger" style="margin-bottom: 15px;"></div>
             
-            <form id="loanForm" onsubmit="handleLoanSubmit(event)">
-                <input type="hidden" id="loanItemName">
+            <form onsubmit="confirmAddToCart(event)">
+                <input type="hidden" id="addToCartItemName">
+                <input type="hidden" id="addToCartMaxStock">
                 
                 <div class="form-group">
-                    <label class="form-label">Elemento a solicitar:</label>
-                    <p id="loanItemDisplayName" style="font-weight: bold; margin-bottom: 10px;"></p>
+                    <label class="form-label">Elemento:</label>
+                    <p id="addToCartItemDisplayName" style="font-weight: bold; margin-bottom: 10px;"></p>
                 </div>
 
                 <div class="form-group">
-                    <label for="loanQuantity" class="form-label">Cantidad *</label>
-                    <input type="number" id="loanQuantity" class="form-control" min="1" required>
-                    <small id="loanMaxStock" style="color: var(--text-secondary);"></small>
-                </div>
-                
-                <div class="form-group">
-                    <label for="loanReturnDate" class="form-label">Fecha de Devolución *</label>
-                    <input type="date" id="loanReturnDate" class="form-control" required>
-                    <small style="color: var(--text-secondary);">El tiempo de préstamo predeterminado es de 2 días.</small>
+                    <label for="addToCartQuantity" class="form-label">Cantidad a agregar *</label>
+                    <input type="number" id="addToCartQuantity" class="form-control" min="1" required>
+                    <small id="addToCartMaxStockDisplay" style="color: var(--text-secondary);"></small>
                 </div>
 
                 <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
-                    <button type="button" onclick="closeLoanModal()" class="btn btn-secondary">Cancelar</button>
-                    <button type="submit" class="btn btn-primary" id="confirmLoanBtn">Confirmar Solicitud</button>
+                    <button type="button" onclick="closeAddToCartModal()" class="btn btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Añadir al Carrito</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Botón Flotante del Carrito -->
+    <button id="cartFloatingBtn" onclick="openCartModal()" style="display: none; position: fixed; bottom: 30px; right: 30px; z-index: 1000; border-radius: 50%; width: 60px; height: 60px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); font-size: 24px; align-items: center; justify-content: center;" class="btn btn-primary">
+        🛒<span id="cartCountBadge" style="position: absolute; top: -5px; right: -5px; background: var(--color-danger); color: white; border-radius: 50%; padding: 2px 6px; font-size: 12px; font-weight: bold;">0</span>
+    </button>
+
+    <!-- Cart Modal (Estudiante) -->
+    <div class="modal-overlay" id="cartModal">
+        <div class="modal-content glass-panel" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>🛒 Tu Carrito de Préstamos</h3>
+                <button onclick="closeCartModal()" class="modal-close">&times;</button>
+            </div>
+            <div id="cartAlert" class="alert alert-danger" style="margin-bottom: 15px;"></div>
+            
+            <form id="cartForm" onsubmit="handleCartSubmit(event)">
+                
+                <div class="form-group" style="max-height: 250px; overflow-y: auto;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Elemento</th>
+                                <th>Cantidad</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cartTableBody">
+                            <tr><td colspan="3" style="text-align: center;">El carrito está vacío.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="form-group" style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                    <label for="loanReturnDate" class="form-label">Fecha de Devolución para el Carrito *</label>
+                    <input type="date" id="loanReturnDate" class="form-control" required>
+                    <small style="color: var(--text-secondary);">El préstamo por defecto es por el día de hoy. Máximo 4 días hábiles.</small>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
+                    <button type="button" onclick="closeCartModal()" class="btn btn-secondary">Seguir Buscando</button>
+                    <button type="submit" class="btn btn-primary" id="confirmLoanBtn">Confirmar Solicitud de Carrito</button>
                 </div>
             </form>
         </div>
@@ -423,16 +565,43 @@
                 <button onclick="closeAddStockModal()" class="modal-close">&times;</button>
             </div>
             
-            <div class="form-group" style="margin-top: 15px;">
-                <label for="addStockAmount" class="form-label">Cantidad a ingresar</label>
-                <input type="number" id="addStockAmount" class="form-control" value="1" min="1" required>
+            <form id="addStockForm" onsubmit="event.preventDefault(); confirmAgregarStock();">
                 <input type="hidden" id="addStockItemId">
+                <div class="form-group">
+                    <label for="addStockAmount" class="form-label">Cantidad a modificar (+ para agregar, - para reducir/eliminar) *</label>
+                    <input type="number" id="addStockAmount" class="form-control" value="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="addStockReason" class="form-label">Motivo de la modificación *</label>
+                    <textarea id="addStockReason" class="form-control" rows="3" required placeholder="Ej: Compra de nuevo lote, Elementos quemados, etc."></textarea>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
+                    <button type="button" onclick="closeAddStockModal()" class="btn btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Confirmar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Delete Item Modal -->
+    <div class="modal-overlay" id="deleteItemModal">
+        <div class="modal-content glass-panel" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3 style="color: var(--color-danger);">Dar de Baja Elemento</h3>
+                <button onclick="closeDeleteItemModal()" class="modal-close">&times;</button>
             </div>
-            
-            <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
-                <button type="button" class="btn btn-secondary" onclick="closeAddStockModal()">Cancelar</button>
-                <button type="button" class="btn btn-primary" onclick="confirmAgregarStock()">Agregar</button>
-            </div>
+            <p>¿Estás seguro de que deseas eliminar (dar de baja) este elemento? Esta acción requiere justificación.</p>
+            <form id="deleteItemForm" onsubmit="event.preventDefault(); confirmDeleteItem();">
+                <input type="hidden" id="deleteItemId">
+                <div class="form-group">
+                    <label for="deleteItemReason" class="form-label">Motivo de la baja *</label>
+                    <textarea id="deleteItemReason" class="form-control" rows="3" required placeholder="Ej: Equipo obsoleto, Pérdida total, etc."></textarea>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
+                    <button type="button" onclick="closeDeleteItemModal()" class="btn btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn btn-danger">Confirmar Baja</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -461,9 +630,72 @@
         </div>
     </div>
 
+    <!-- Category Modal -->
+    <div class="modal-overlay" id="categoryModal">
+        <div class="modal-content glass-panel" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3 id="categoryModalTitle">Nueva Categoría</h3>
+                <button onclick="closeCategoryModal()" class="modal-close">&times;</button>
+            </div>
+            <div id="categoryModalAlert" class="alert alert-danger" style="margin-bottom: 15px; display: none;"></div>
+            
+            <form id="categoryForm" onsubmit="handleCategorySubmit(event)">
+                <input type="hidden" id="categoryId">
+                
+                <div class="form-group">
+                    <label for="categoryName" class="form-label">Nombre *</label>
+                    <input type="text" id="categoryName" class="form-control" required>
+                </div>
+                <div class="form-group" style="margin-top: 15px;">
+                    <label for="categoryStockMinimo" class="form-label">Stock Mínimo por Defecto *</label>
+                    <input type="number" id="categoryStockMinimo" class="form-control" min="1" value="1" required>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
+                    <button type="button" onclick="closeCategoryModal()" class="btn btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Student Return Modal -->
+    <div class="modal-overlay" id="studentReturnModal">
+        <div class="modal-content glass-panel" style="max-width: 450px;">
+            <div class="modal-header">
+                <h3>Solicitar Devolución</h3>
+                <button onclick="closeStudentReturnModal()" class="modal-close">&times;</button>
+            </div>
+            
+            <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 15px;">
+                Para procesar la devolución, por favor adjunta una evidencia fotográfica de los elementos. Luego deberás acercarte al laboratorio físico a entregarlos.
+            </p>
+
+            <form id="studentReturnForm" onsubmit="submitStudentReturn(event)">
+                <input type="hidden" id="studentReturnCodigo">
+                
+                <div class="form-group">
+                    <label for="studentReturnImage" class="form-label">Evidencia Fotográfica (Obligatorio) *</label>
+                    <input type="file" id="studentReturnImage" class="form-control" accept="image/*" required>
+                </div>
+                
+                <div class="form-group" style="margin-top: 15px;">
+                    <label for="studentReturnComment" class="form-label">Comentario (Opcional)</label>
+                    <textarea id="studentReturnComment" class="form-control" rows="3" placeholder="Motivo de devolución o nota al profesor..."></textarea>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
+                    <button type="button" onclick="closeStudentReturnModal()" class="btn btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btnStudentReturnSubmit">Enviar Solicitud</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Script assets loader -->
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://npmcdn.com/flatpickr/dist/l10n/es.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="js/app.js?v=2.4"></script>
 </body>
 </html>

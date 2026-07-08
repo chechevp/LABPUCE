@@ -177,6 +177,12 @@ namespace LaboratorioPUCE.Models
 
         [Column("es_consumible")]
         public byte EsConsumible { get; set; }
+
+        [Column("activo")]
+        public byte Activo { get; set; } = 1;
+
+        [Column("stock_minimo")]
+        public int StockMinimo { get; set; } = 1;
     }
 
     [Table("iteminventario")]
@@ -265,6 +271,69 @@ namespace LaboratorioPUCE.Models
         [Column("imagen_url")]
         [StringLength(500)]
         public string? ImagenUrl { get; set; }
+    }
+
+    [Table("notificacion")]
+    public class Notificacion
+    {
+        [Key]
+        [Column("notificacion_id")]
+        public int NotificacionId { get; set; }
+
+        [Column("usuario_id")]
+        public int UsuarioId { get; set; }
+
+        [ForeignKey(nameof(UsuarioId))]
+        public Usuario? Usuario { get; set; }
+
+        [Required]
+        [Column("titulo")]
+        public string Titulo { get; set; } = string.Empty;
+
+        [Required]
+        [Column("mensaje")]
+        public string Mensaje { get; set; } = string.Empty;
+
+        [Column("leida")]
+        public int Leida { get; set; } = 0; // 0 = false, 1 = true
+
+        [Column("fecha_creacion")]
+        public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
+
+        [Column("referencia_id")]
+        public string? ReferenciaId { get; set; }
+
+        [Column("tipo")]
+        public string? Tipo { get; set; }
+    }
+
+    [Table("logtransaccion")]
+    public class LogTransaccion
+    {
+        [Key]
+        [Column("log_id")]
+        public int LogId { get; set; }
+
+        [Column("usuario_id")]
+        public int UsuarioId { get; set; }
+
+        [ForeignKey(nameof(UsuarioId))]
+        public Usuario? Usuario { get; set; }
+
+        [Required]
+        [Column("accion")]
+        [StringLength(50)]
+        public string Accion { get; set; } = string.Empty; // e.g. AGREGAR_STOCK, ELIMINAR_ITEM, CREAR_ITEM
+
+        [Required]
+        [Column("detalle")]
+        public string Detalle { get; set; } = string.Empty; // Justification or specific details
+
+        [Column("referencia_id")]
+        public int? ReferenciaId { get; set; } // e.g. ItemId
+
+        [Column("fecha_hora")]
+        public DateTime FechaHora { get; set; } = DateTime.UtcNow;
     }
 
     [Table("sesionusuario")]

@@ -34,15 +34,29 @@ namespace LaboratorioPUCE.Controllers
             return session?.Usuario?.RolId == 1;
         }
 
+        private async Task<bool> IsAdminOrDocente()
+        {
+            var authHeader = Request.Headers["Authorization"].ToString();
+            if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ")) return false;
+            
+            var token = authHeader.Substring("Bearer ".Length).Trim();
+            var session = await _context.SesionesUsuario
+                .Include(s => s.Usuario)
+                .FirstOrDefaultAsync(s => s.Token == token && s.Activa == 1 && s.FechaExpira > DateTime.UtcNow);
+                
+            return session?.Usuario?.RolId == 1 || session?.Usuario?.RolId == 3;
+        }
+
         [HttpGet("pendientes")]
         public async Task<IActionResult> ObtenerPendientes()
         {
-            if (!await IsAdmin()) return Unauthorized(new { mensaje = "Acceso denegado." });
+            if (!await IsAdminOrDocente()) return Unauthorized(new { mensaje = "Acceso denegado." });
 
             var solicitudes = await _prestamosService.ObtenerSolicitudesPendientesAsync();
 
             var dtos = solicitudes.Select(s => new
             {
+                PrestamoId = s.PrestamoId,
                 CodigoReserva = s.CodigoReserva,
                 Usuario = $"{s.Usuario?.Nombre} {s.Usuario?.Apellido} ({s.Usuario?.Correo})",
                 NombreItem = s.Item?.Nombre,
@@ -59,11 +73,12 @@ namespace LaboratorioPUCE.Controllers
         [HttpGet("devoluciones")]
         public async Task<IActionResult> ObtenerSolicitudesDevolucion()
         {
-            if (!await IsAdmin()) return Unauthorized(new { mensaje = "Acceso denegado." });
+            if (!await IsAdminOrDocente()) return Unauthorized(new { mensaje = "Acceso denegado." });
 
             var solicitudes = await _prestamosService.ObtenerSolicitudesDevolucionAsync();
             var dtos = solicitudes.Select(s => new
             {
+                PrestamoId = s.PrestamoId,
                 CodigoReserva = s.CodigoReserva,
                 Usuario = $"{s.Usuario?.Nombre} {s.Usuario?.Apellido} ({s.Usuario?.Correo})",
                 NombreItem = s.Item?.Nombre,
@@ -71,7 +86,9 @@ namespace LaboratorioPUCE.Controllers
                 Cantidad = s.Cantidad,
                 Estado = s.Estado,
                 FechaSolicitud = s.FechaSolicitud,
-                FechaDevolucion = s.FechaDevolucion
+                FechaDevolucion = s.FechaDevolucion,
+                EvidenciaUrl = s.EvidenciaUrl,
+                ComentarioAdmin = s.ComentarioAdmin
             });
 
             return Ok(dtos);
@@ -87,7 +104,7 @@ namespace LaboratorioPUCE.Controllers
         [HttpPut("{codigoReserva}/estado")]
         public async Task<IActionResult> ActualizarEstado(string codigoReserva, [FromBody] EstadoRequest request)
         {
-            if (!await IsAdmin()) return Unauthorized(new { mensaje = "Acceso denegado." });
+            if (!await IsAdminOrDocente()) return Unauthorized(new { mensaje = "Acceso denegado." });
 
             if (request.Estado != "APROBADO" && request.Estado != "RECHAZADO")
                 return BadRequest(new { mensaje = "Estado no válido." });
@@ -100,16 +117,33 @@ namespace LaboratorioPUCE.Controllers
             return Ok(new { mensaje = $"Solicitud {request.Estado.ToLower()} correctamente." });
         }
 
+        [HttpPut("item/{prestamoId}/estado")]
+        public async Task<IActionResult> ActualizarEstadoPorId(int prestamoId, [FromBody] EstadoRequest request)
+        {
+            if (!await IsAdminOrDocente()) return Unauthorized(new { mensaje = "Acceso denegado." });
+
+            if (request.Estado != "APROBADO" && request.Estado != "RECHAZADO")
+                return BadRequest(new { mensaje = "Estado no válido." });
+
+            var exito = await _prestamosService.ActualizarEstadoSolicitudPorIdAsync(prestamoId, request.Estado, request.ComentarioAdmin);
+            
+            if (!exito)
+                return NotFound(new { mensaje = "Item de solicitud no encontrado." });
+
+            return Ok(new { mensaje = $"Ítem {request.Estado.ToLower()} correctamente." });
+        }
+
         [HttpGet("historial")]
         public async Task<IActionResult> ObtenerHistorial()
         {
-            if (!await IsAdmin()) return Unauthorized(new { mensaje = "Acceso denegado." });
+            if (!await IsAdminOrDocente()) return Unauthorized(new { mensaje = "Acceso denegado." });
 
             var prestamos = await _prestamosService.ObtenerTodosPrestamosAsync();
 
             var agrupadas = prestamos
                 .Select(s => new
                 {
+                    PrestamoId = s.PrestamoId,
                     CodigoReserva = s.CodigoReserva,
                     Usuario = $"{s.Usuario?.Nombre} {s.Usuario?.Apellido} ({s.Usuario?.Correo})",
                     NombreItem = s.Item?.Nombre,
@@ -117,7 +151,9 @@ namespace LaboratorioPUCE.Controllers
                     Cantidad = s.Cantidad,
                     FechaSolicitud = s.FechaSolicitud,
                     FechaDevolucion = s.FechaDevolucion,
-                    Estado = s.Estado
+                    Estado = s.Estado,
+                    EvidenciaUrl = s.EvidenciaUrl,
+                    ComentarioAdmin = s.ComentarioAdmin
                 });
 
             return Ok(agrupadas);
@@ -126,7 +162,7 @@ namespace LaboratorioPUCE.Controllers
         [HttpGet("historial/{codigoReserva}")]
         public async Task<IActionResult> ObtenerDetalle(string codigoReserva)
         {
-            if (!await IsAdmin()) return Unauthorized(new { mensaje = "Acceso denegado." });
+            if (!await IsAdminOrDocente()) return Unauthorized(new { mensaje = "Acceso denegado." });
 
             var prestamo = await _prestamosService.ObtenerPrestamoPorCodigoAsync(codigoReserva);
             if (prestamo == null) return NotFound(new { mensaje = "Préstamo no encontrado." });
@@ -156,7 +192,7 @@ namespace LaboratorioPUCE.Controllers
         [HttpPost("{codigoReserva}/devolver")]
         public async Task<IActionResult> MarcarDevuelto(string codigoReserva, [FromBody] DevolucionRequest req)
         {
-            if (!await IsAdmin()) return Unauthorized(new { mensaje = "Acceso denegado." });
+            if (!await IsAdminOrDocente()) return Unauthorized(new { mensaje = "Acceso denegado." });
 
             var exito = await _prestamosService.MarcarComoDevueltoAsync(codigoReserva, req.ComentarioAdmin, req.CantidadDefectuosa);
 
@@ -169,7 +205,7 @@ namespace LaboratorioPUCE.Controllers
         [HttpPost("{codigoReserva}/devolver/rechazar")]
         public async Task<IActionResult> RechazarDevolucion(string codigoReserva, [FromBody] DevolucionRequest req)
         {
-            if (!await IsAdmin()) return Unauthorized(new { mensaje = "Acceso denegado." });
+            if (!await IsAdminOrDocente()) return Unauthorized(new { mensaje = "Acceso denegado." });
 
             var exito = await _prestamosService.RechazarDevolucionAsync(codigoReserva, req.ComentarioAdmin);
 
@@ -177,6 +213,32 @@ namespace LaboratorioPUCE.Controllers
                 return BadRequest(new { mensaje = "No se pudo rechazar la devolución." });
 
             return Ok(new { mensaje = "Devolución rechazada. El ítem sigue prestado." });
+        }
+
+        [HttpPost("item/{prestamoId}/devolver")]
+        public async Task<IActionResult> MarcarDevueltoPorId(int prestamoId, [FromBody] DevolucionRequest req)
+        {
+            if (!await IsAdminOrDocente()) return Unauthorized(new { mensaje = "Acceso denegado." });
+
+            var exito = await _prestamosService.MarcarComoDevueltoPorIdAsync(prestamoId, req.ComentarioAdmin, req.CantidadDefectuosa, req.EvidenciaUrl);
+
+            if (!exito)
+                return BadRequest(new { mensaje = "Préstamo no encontrado o no está en estado APROBADO." });
+
+            return Ok(new { mensaje = "Ítem marcado como devuelto correctamente." });
+        }
+
+        [HttpPost("item/{prestamoId}/devolver/rechazar")]
+        public async Task<IActionResult> RechazarDevolucionPorId(int prestamoId, [FromBody] DevolucionRequest req)
+        {
+            if (!await IsAdminOrDocente()) return Unauthorized(new { mensaje = "Acceso denegado." });
+
+            var exito = await _prestamosService.RechazarDevolucionPorIdAsync(prestamoId, req.ComentarioAdmin, req.EvidenciaUrl);
+
+            if (!exito)
+                return BadRequest(new { mensaje = "No se pudo rechazar la devolución." });
+
+            return Ok(new { mensaje = "Devolución de ítem rechazada." });
         }
     }
 }

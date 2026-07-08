@@ -60,6 +60,12 @@ async function validateSession() {
             const menuHistory = document.getElementById('menu-history');
             if(menuHistory) menuHistory.style.display = 'flex';
             
+            const menuStats = document.getElementById('menu-stats');
+            if(menuStats) menuStats.style.display = 'flex';
+            
+            const menuBloqueados = document.getElementById('menu-bloqueados');
+            if(menuBloqueados) menuBloqueados.style.display = 'flex';
+            
             localStorage.setItem('user_role_id', '1');
 
             // Iniciar notificaciones para admin
@@ -71,6 +77,9 @@ async function validateSession() {
             
             const menuStudentHistory = document.getElementById('menu-student-history');
             if(menuStudentHistory) menuStudentHistory.style.display = 'flex';
+            
+            const menuStats = document.getElementById('menu-stats');
+            if(menuStats) menuStats.style.display = 'flex';
             
             localStorage.setItem('user_role_id', '2');
             
@@ -753,6 +762,10 @@ function showSection(sectionId, element) {
         fetchHistory();
     } else if (sectionId === 'section-student-history') {
         fetchStudentHistory();
+    } else if (sectionId === 'section-stats') {
+        fetchEstadisticas();
+    } else if (sectionId === 'section-bloqueados') {
+        fetchBloqueados();
     }
 }
 
@@ -1477,3 +1490,160 @@ async function solicitarDevolucion(codigoReserva) {
     }
 }
 
+// --- ESTADÍSTICAS ---
+let mainChartInstance = null;
+let statsData = null;
+
+async function fetchEstadisticas() {
+    try {
+        const response = await fetch('/api/estadisticas', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+            statsData = await response.json();
+            
+            const isStudent = localStorage.getItem('user_role_id') === '2'; // Estudiante
+            if (!isStudent && statsData.porEstudiante) {
+                document.getElementById('optStatEstudiante').style.display = 'block';
+            } else {
+                document.getElementById('optStatEstudiante').style.display = 'none';
+            }
+            
+            renderSelectedStatistic();
+        } else {
+            showToast('Error al cargar estadísticas.', 'error');
+        }
+    } catch (err) {
+        console.error('Error fetching stats', err);
+    }
+}
+
+function renderSelectedStatistic() {
+    if (!statsData) return;
+    
+    const selector = document.getElementById('statsTypeSelector');
+    const selectedType = selector.value;
+    
+    if (mainChartInstance) {
+        mainChartInstance.destroy();
+    }
+    
+    const ctx = document.getElementById('mainStatsChart').getContext('2d');
+    
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { labels: { color: '#ccc' } }
+        },
+        scales: {
+            x: { ticks: { color: '#ccc' } },
+            y: { ticks: { color: '#ccc' }, beginAtZero: true }
+        }
+    };
+    
+    let labels = [];
+    let dataSet = [];
+    let labelTitle = '';
+    let bgColor = '';
+    
+    if (selectedType === 'elemento' && statsData.porElemento) {
+        labels = statsData.porElemento.map(x => x.nombre);
+        dataSet = statsData.porElemento.map(x => x.cantidad);
+        labelTitle = 'Cantidad Devuelta por Elemento';
+        bgColor = 'rgba(52, 152, 219, 0.7)';
+    } else if (selectedType === 'categoria' && statsData.porCategoria) {
+        labels = statsData.porCategoria.map(x => x.nombre);
+        dataSet = statsData.porCategoria.map(x => x.cantidad);
+        labelTitle = 'Cantidad Devuelta por Categoría';
+        bgColor = 'rgba(230, 126, 34, 0.7)';
+    } else if (selectedType === 'fecha' && statsData.porFecha) {
+        labels = statsData.porFecha.map(x => x.fecha);
+        dataSet = statsData.porFecha.map(x => x.cantidad);
+        labelTitle = 'Devoluciones por Fecha';
+        bgColor = 'rgba(155, 89, 182, 0.7)';
+    } else if (selectedType === 'estudiante' && statsData.porEstudiante) {
+        labels = statsData.porEstudiante.map(x => x.nombre);
+        dataSet = statsData.porEstudiante.map(x => x.cantidad);
+        labelTitle = 'Total Devuelto por Estudiante';
+        bgColor = 'rgba(46, 204, 113, 0.7)';
+    }
+    
+    mainChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: labelTitle,
+                data: dataSet,
+                backgroundColor: bgColor,
+                borderWidth: 1
+            }]
+        },
+        options: chartOptions
+    });
+}
+
+// --- BLOQUEADOS ---
+async function fetchBloqueados() {
+    try {
+        const tbody = document.getElementById('bloqueadosTableBody');
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Cargando...</td></tr>';
+        
+        const response = await fetch('/api/bloqueados', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            tbody.innerHTML = '';
+            
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No hay estudiantes bloqueados actualmente.</td></tr>';
+                return;
+            }
+            
+            data.forEach(est => {
+                const tr = document.createElement('tr');
+                const prestamosList = est.prestamosVencidos.map(p => `<div>[${p.codigoReserva}] - Cant: ${p.cantidad} (Debió dev: ${new Date(p.fechaDevolucion).toLocaleDateString()})</div>`).join('');
+                
+                tr.innerHTML = `
+                    <td style="padding: 10px;">${est.nombre} ${est.apellido}</td>
+                    <td style="padding: 10px;">${est.correo}</td>
+                    <td style="padding: 10px;">${prestamosList}</td>
+                    <td style="padding: 10px; text-align: center;">
+                        <button onclick="notificarEstudiante(${est.usuarioId})" class="btn btn-primary" style="padding: 5px 10px; font-size: 0.85rem;">
+                            🔔 Notificar
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } else {
+            showToast('Error al cargar bloqueados.', 'error');
+        }
+    } catch (err) {
+        console.error('Error fetching bloqueados', err);
+    }
+}
+
+async function notificarEstudiante(usuarioId) {
+    if(!confirm('¿Deseas enviar una notificación de alerta a este estudiante?')) return;
+    
+    try {
+        const response = await fetch(`/api/bloqueados/notificar/${usuarioId}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+            showToast('Notificación enviada correctamente.', 'success');
+        } else {
+            const errorText = await response.text();
+            showToast('Error: ' + errorText, 'error');
+        }
+    } catch (err) {
+        console.error('Error', err);
+        showToast('Error de conexión', 'error');
+    }
+}

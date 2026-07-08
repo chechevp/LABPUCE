@@ -80,8 +80,9 @@ namespace LaboratorioPUCE.Controllers
             await _context.SaveChangesAsync();
 
             // Determine redirect target based on Rol
-            // RolId 1 is Administrador, RolId 2 is Estudiante
-            string redirectUrl = user.RolId == 1 ? "/dashboard.html?view=admin" : "/dashboard.html?view=student";
+            // RolId 1 is Administrador, RolId 2 is Estudiante, RolId 3 is Docente
+            string redirectUrl = user.RolId == 1 ? "/dashboard.html?view=admin" : 
+                                 (user.RolId == 3 ? "/dashboard.html?view=docente" : "/dashboard.html?view=student");
 
             return Ok(new
             {

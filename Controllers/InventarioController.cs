@@ -109,7 +109,9 @@ namespace LaboratorioPUCE.Controllers
             model.Nombre = model.Nombre.Trim();
             model.NumeroSerie = model.NumeroSerie?.Trim();
             if (model.Stock <= 0) model.Stock = 1;
-            if (model.StockMinimo < 0) model.StockMinimo = 1;
+            
+            var categoria = await _context.CategoriasItem.FirstOrDefaultAsync(c => c.CategoriaId == model.CategoriaId);
+            model.StockMinimo = categoria != null ? categoria.StockMinimo : 1;
 
             model.FechaCreacion = DateTime.UtcNow;
             model.Activo = 1;
@@ -119,6 +121,16 @@ namespace LaboratorioPUCE.Controllers
             model.EsPublico = model.EsPublico == 0 ? 0 : 1;
 
             _context.ItemsInventario.Add(model);
+            await _context.SaveChangesAsync();
+
+            // Log creation
+            _context.LogsTransacciones.Add(new LaboratorioPUCE.Models.LogTransaccion
+            {
+                UsuarioId = adminUser.UsuarioId,
+                Accion = "CREAR_ITEM",
+                Detalle = $"Elemento creado con stock inicial de {model.Stock}.",
+                ReferenciaId = model.ItemId
+            });
             await _context.SaveChangesAsync();
 
             return CreatedAtAction(nameof(GetById), new { id = model.ItemId }, model);
@@ -169,11 +181,14 @@ namespace LaboratorioPUCE.Controllers
             existingItem.FechaAdquisicion = model.FechaAdquisicion;
             existingItem.Observaciones = model.Observaciones;
             existingItem.Stock = model.Stock;
-            existingItem.StockMinimo = model.StockMinimo;
-            existingItem.EsPublico = model.EsPublico;
             existingItem.ImagenUrl = model.ImagenUrl;
             if (model.EspacioId > 0) existingItem.EspacioId = model.EspacioId;
-            if (model.CategoriaId > 0) existingItem.CategoriaId = model.CategoriaId;
+            if (model.CategoriaId > 0) 
+            {
+                existingItem.CategoriaId = model.CategoriaId;
+                var categoria = await _context.CategoriasItem.FirstOrDefaultAsync(c => c.CategoriaId == model.CategoriaId);
+                if (categoria != null) existingItem.StockMinimo = categoria.StockMinimo;
+            }
 
             _context.ItemsInventario.Update(existingItem);
             await _context.SaveChangesAsync();
@@ -181,14 +196,43 @@ namespace LaboratorioPUCE.Controllers
             return Ok(existingItem);
         }
 
-        // DELETE: api/inventario/{id} (Soft Delete as required by inventory records)
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> Delete(int id)
+        public class VisibilidadDto { public bool Visible { get; set; } }
+
+        [HttpPut("{id}/visibilidad")]
+        public async Task<IActionResult> ToggleVisibilidad(int id, [FromBody] VisibilidadDto dto)
         {
             var adminUser = await ValidateAdminSessionAsync();
             if (adminUser == null)
             {
                 return Unauthorized(new { mensaje = "Acceso denegado. Se requieren credenciales de Administrador." });
+            }
+
+            var existingItem = await _context.ItemsInventario.FirstOrDefaultAsync(i => i.ItemId == id && i.Activo == 1);
+            if (existingItem == null)
+            {
+                return NotFound(new { mensaje = "Elemento de inventario no encontrado." });
+            }
+
+            existingItem.EsPublico = (byte)(dto.Visible ? 1 : 0);
+            _context.ItemsInventario.Update(existingItem);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { mensaje = dto.Visible ? "Elemento ahora visible para estudiantes." : "Elemento oculto para estudiantes.", estado = existingItem.EsPublico });
+        }
+
+        // DELETE: api/inventario/{id} (Soft Delete as required by inventory records)
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id, [FromQuery] string motivo)
+        {
+            var adminUser = await ValidateAdminSessionAsync();
+            if (adminUser == null)
+            {
+                return Unauthorized(new { mensaje = "Acceso denegado. Se requieren credenciales de Administrador." });
+            }
+
+            if (string.IsNullOrWhiteSpace(motivo))
+            {
+                return BadRequest(new { mensaje = "Es obligatorio proporcionar un motivo para eliminar el elemento." });
             }
 
             var item = await _context.ItemsInventario.FirstOrDefaultAsync(i => i.ItemId == id && i.Activo == 1);
@@ -200,6 +244,15 @@ namespace LaboratorioPUCE.Controllers
             // Soft delete
             item.Activo = 0;
             _context.ItemsInventario.Update(item);
+            
+            _context.LogsTransacciones.Add(new LaboratorioPUCE.Models.LogTransaccion
+            {
+                UsuarioId = adminUser.UsuarioId,
+                Accion = "ELIMINAR_ITEM",
+                Detalle = motivo.Trim(),
+                ReferenciaId = item.ItemId
+            });
+
             await _context.SaveChangesAsync();
 
             return Ok(new { mensaje = "Elemento de inventario eliminado correctamente." });
@@ -208,6 +261,7 @@ namespace LaboratorioPUCE.Controllers
         public class AgregarStockRequest
         {
             public int Cantidad { get; set; }
+            public string Motivo { get; set; } = string.Empty;
         }
 
         [HttpPost("{id}/agregar-stock")]
@@ -219,9 +273,9 @@ namespace LaboratorioPUCE.Controllers
                 return Unauthorized(new { mensaje = "Acceso denegado. Se requieren credenciales de Administrador." });
             }
 
-            if (req.Cantidad <= 0)
+            if (string.IsNullOrWhiteSpace(req.Motivo))
             {
-                return BadRequest(new { mensaje = "La cantidad a agregar debe ser mayor a 0." });
+                return BadRequest(new { mensaje = "El motivo de la modificación de stock es obligatorio." });
             }
 
             var item = await _context.ItemsInventario.FirstOrDefaultAsync(i => i.ItemId == id && i.Activo == 1);
@@ -230,8 +284,23 @@ namespace LaboratorioPUCE.Controllers
                 return NotFound(new { mensaje = "Elemento de inventario no encontrado." });
             }
 
+            if (item.Stock + req.Cantidad < 0)
+            {
+                return BadRequest(new { mensaje = $"La cantidad a reducir ({Math.Abs(req.Cantidad)}) excede el stock actual ({item.Stock})." });
+            }
+
             item.Stock += req.Cantidad;
             _context.ItemsInventario.Update(item);
+
+            string accionStr = req.Cantidad >= 0 ? "AGREGAR_STOCK" : "REDUCIR_STOCK";
+            _context.LogsTransacciones.Add(new LaboratorioPUCE.Models.LogTransaccion
+            {
+                UsuarioId = adminUser.UsuarioId,
+                Accion = accionStr,
+                Detalle = $"Cantidad {(req.Cantidad > 0 ? "+" : "")}{req.Cantidad}. Motivo: {req.Motivo.Trim()}",
+                ReferenciaId = item.ItemId
+            });
+
             await _context.SaveChangesAsync();
 
             return Ok(new { mensaje = $"Stock actualizado exitosamente. Nuevo stock: {item.Stock}", nuevoStock = item.Stock });
@@ -258,6 +327,15 @@ namespace LaboratorioPUCE.Controllers
             item.Stock += req.Cantidad;
             
             _context.ItemsInventario.Update(item);
+            
+            _context.LogsTransacciones.Add(new LaboratorioPUCE.Models.LogTransaccion
+            {
+                UsuarioId = adminUser.UsuarioId,
+                Accion = "REPARAR_ITEM",
+                Detalle = $"Se repararon {req.Cantidad} elementos defectuosos.",
+                ReferenciaId = item.ItemId
+            });
+
             await _context.SaveChangesAsync();
 
             return Ok(new { mensaje = $"Se han reparado {req.Cantidad} elementos. Nuevo stock: {item.Stock}" });
@@ -267,7 +345,7 @@ namespace LaboratorioPUCE.Controllers
         [HttpGet("metadata")]
         public async Task<IActionResult> GetMetadata()
         {
-            var categories = await _context.CategoriasItem.AsNoTracking().ToListAsync();
+            var categories = await _context.CategoriasItem.Where(c => c.Activo == 1).AsNoTracking().ToListAsync();
             var spaces = await _context.Espacios.Include(e => e.Taller).AsNoTracking().ToListAsync();
             return Ok(new { categories, spaces });
         }
