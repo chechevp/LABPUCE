@@ -349,5 +349,46 @@ namespace LaboratorioPUCE.Controllers
             var spaces = await _context.Espacios.Include(e => e.Taller).AsNoTracking().ToListAsync();
             return Ok(new { categories, spaces });
         }
+
+        public class CrearEspacioRequest
+        {
+            public string Nombre { get; set; } = string.Empty;
+        }
+
+        [HttpPost("espacio")]
+        public async Task<IActionResult> CrearEspacio([FromBody] CrearEspacioRequest req)
+        {
+            var adminUser = await ValidateAdminSessionAsync();
+            if (adminUser == null)
+            {
+                return Unauthorized(new { mensaje = "Acceso denegado. Se requieren credenciales de Administrador." });
+            }
+
+            if (string.IsNullOrWhiteSpace(req.Nombre))
+            {
+                return BadRequest(new { mensaje = "El nombre de la ubicación física es obligatorio." });
+            }
+
+            var existe = await _context.Espacios.AnyAsync(e => e.Nombre.ToLower() == req.Nombre.Trim().ToLower());
+            if (existe)
+            {
+                return BadRequest(new { mensaje = "La ubicación física ya existe." });
+            }
+
+            var nuevoEspacio = new LaboratorioPUCE.Models.Espacio
+            {
+                Nombre = req.Nombre.Trim(),
+                TallerId = 1,
+                TipoEspacioId = 1,
+                Activo = 1,
+                RequiereAprobacion = 0,
+                Capacidad = 99
+            };
+
+            _context.Espacios.Add(nuevoEspacio);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { espacioId = nuevoEspacio.EspacioId, nombre = nuevoEspacio.Nombre, mensaje = "Ubicación física creada exitosamente." });
+        }
     }
 }

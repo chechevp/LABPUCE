@@ -382,11 +382,36 @@
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                     <div class="form-group">
                         <label for="itemCategory" class="form-label">Categoría *</label>
-                        <select id="itemCategory" class="form-control" required></select>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <select id="itemCategory" class="form-control" required style="flex-grow: 1;"></select>
+                            <button type="button" onclick="openCreateCategoryModal()" class="btn btn-secondary" style="padding: 8px 12px; margin-top: 0; min-height: 42px;" title="Agregar Categoría">➕</button>
+                        </div>
                     </div>
                     <div class="form-group">
+                        <label for="itemLugar" class="form-label">Lugar</label>
+                        <input type="text" id="itemLugar" class="form-control" value="Laboratorio de Electrónica" disabled>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="form-group">
                         <label for="itemSpace" class="form-label">Ubicación Física *</label>
-                        <select id="itemSpace" class="form-control" required></select>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <select id="itemSpace" class="form-control" required style="flex-grow: 1;"></select>
+                            <button type="button" onclick="openAddSpaceModal()" class="btn btn-secondary" style="padding: 8px 12px; margin-top: 0; min-height: 42px;" title="Agregar Ubicación">➕</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="itemGaveta" class="form-label">Gaveta</label>
+                        <select id="itemGaveta" class="form-control">
+                            <option value="">Ninguna</option>
+                            <option value="Gaveta 1">Gaveta 1</option>
+                            <option value="Gaveta 2">Gaveta 2</option>
+                            <option value="Gaveta 3">Gaveta 3</option>
+                            <option value="Gaveta 4">Gaveta 4</option>
+                            <option value="Gaveta 5">Gaveta 5</option>
+                            <option value="Gaveta 6">Gaveta 6</option>
+                        </select>
                     </div>
                 </div>
 
@@ -583,6 +608,28 @@
         </div>
     </div>
     
+
+    <!-- Add Space Modal -->
+    <div class="modal-overlay" id="addSpaceModal" style="z-index: 1100;">
+        <div class="modal-content glass-panel" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Agregar Ubicación Física</h3>
+                <button onclick="closeAddSpaceModal()" class="modal-close">&times;</button>
+            </div>
+            
+            <form id="addSpaceForm" onsubmit="event.preventDefault(); confirmAgregarEspacio();">
+                <div class="form-group">
+                    <label for="newSpaceName" class="form-label">Nombre de la Ubicación Física *</label>
+                    <input type="text" id="newSpaceName" class="form-control" placeholder="Ej: Cajón 3, Estante B, etc." required>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
+                    <button type="button" onclick="closeAddSpaceModal()" class="btn btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Confirmar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Delete Item Modal -->
     <div class="modal-overlay" id="deleteItemModal">
         <div class="modal-content glass-panel" style="max-width: 400px;">
@@ -714,6 +761,6 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://npmcdn.com/flatpickr/dist/l10n/es.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="js/app.js?v=2.4"></script>
+    <script src="js/app.js?v=3.4"></script>
 </body>
 </html>

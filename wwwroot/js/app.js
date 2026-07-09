@@ -12,6 +12,22 @@ if (!token) {
     window.location.href = 'index.html';
 }
 
+function getDisplayUbicacion(item) {
+    if (!item) return 'Laboratorio';
+    let spaceName = item.espacio?.nombre || 'Laboratorio';
+    if (item.observaciones && item.observaciones.startsWith("[Gaveta: ")) {
+        const endIdx = item.observaciones.indexOf("] ");
+        if (endIdx !== -1) {
+            const gaveta = item.observaciones.substring(9, endIdx);
+            return `${spaceName} - ${gaveta}`;
+        } else if (item.observaciones.endsWith("]")) {
+            const gaveta = item.observaciones.substring(9, item.observaciones.length - 1);
+            return `${spaceName} - ${gaveta}`;
+        }
+    }
+    return spaceName;
+}
+
 // Initialization on DOM Content Loaded
 document.addEventListener('DOMContentLoaded', async () => {
     await validateSession();
@@ -23,6 +39,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     await fetchInventory();
+
+    const itemCategorySelect = document.getElementById('itemCategory');
+    if (itemCategorySelect) {
+        itemCategorySelect.addEventListener('change', generateItemCode);
+    }
 });
 
 // Validate user session token
@@ -75,6 +96,27 @@ async function validateSession() {
             localStorage.setItem('user_role_id', '1');
 
             // Iniciar notificaciones para admin
+            startNotificationPolling();
+        } else if (user.rolId === 3) { // Docente
+            document.getElementById('addBtn').style.display = 'none';
+            document.getElementById('dashboardTitle').textContent = 'Panel de Docente';
+            document.getElementById('dashboardSubtitle').textContent = 'Información y control de inventario de equipos.';
+            
+            const menuRequests = document.getElementById('menu-requests');
+            if(menuRequests) menuRequests.style.display = 'flex';
+            
+            const menuReturns = document.getElementById('menu-returns');
+            if(menuReturns) menuReturns.style.display = 'flex';
+            
+            const menuHistory = document.getElementById('menu-history');
+            if(menuHistory) menuHistory.style.display = 'flex';
+            
+            const menuStats = document.getElementById('menu-stats');
+            if(menuStats) menuStats.style.display = 'flex';
+            
+            localStorage.setItem('user_role_id', '3');
+            
+            // Iniciar notificaciones para docente
             startNotificationPolling();
         } else { // Student
             document.getElementById('addBtn').style.display = 'none';
@@ -326,30 +368,39 @@ async function fetchMetadata() {
 
             // Populate category filter
             const filterSelect = document.getElementById('categoryFilter');
+            if (filterSelect) filterSelect.innerHTML = '<option value="">Todas las Categorías</option>';
             const formCategorySelect = document.getElementById('itemCategory');
+            if (formCategorySelect) formCategorySelect.innerHTML = '';
             
             categories.forEach(cat => {
                 // Filter dropdown
-                const optFilter = document.createElement('option');
-                optFilter.value = cat.categoriaId;
-                optFilter.textContent = cat.nombre;
-                filterSelect.appendChild(optFilter);
+                if (filterSelect) {
+                    const optFilter = document.createElement('option');
+                    optFilter.value = cat.categoriaId;
+                    optFilter.textContent = cat.nombre;
+                    filterSelect.appendChild(optFilter);
+                }
 
                 // Modal Form dropdown
-                const optForm = document.createElement('option');
-                optForm.value = cat.categoriaId;
-                optForm.textContent = cat.nombre;
-                formCategorySelect.appendChild(optForm);
+                if (formCategorySelect) {
+                    const optForm = document.createElement('option');
+                    optForm.value = cat.categoriaId;
+                    optForm.textContent = cat.nombre;
+                    formCategorySelect.appendChild(optForm);
+                }
             });
 
             // Populate spaces dropdown in Modal Form
             const formSpaceSelect = document.getElementById('itemSpace');
-            spaces.forEach(sp => {
-                const opt = document.createElement('option');
-                opt.value = sp.espacioId;
-                opt.textContent = `${sp.nombre} (${sp.taller?.nombre || 'Taller'})`;
-                formSpaceSelect.appendChild(opt);
-            });
+            if (formSpaceSelect) {
+                formSpaceSelect.innerHTML = '';
+                spaces.forEach(sp => {
+                    const opt = document.createElement('option');
+                    opt.value = sp.espacioId;
+                    opt.textContent = `${sp.nombre} (${sp.taller?.nombre || 'Taller'})`;
+                    formSpaceSelect.appendChild(opt);
+                });
+            }
         }
     } catch (error) {
         console.error('Error fetching metadata:', error);
@@ -360,7 +411,8 @@ async function fetchMetadata() {
 async function fetchInventory() {
     try {
         const isAdmin = localStorage.getItem('user_role_id') === '1';
-        const url = isAdmin ? '/api/inventario' : '/api/estudiante/catalogo';
+        const isDocente = localStorage.getItem('user_role_id') === '3';
+        const url = (isAdmin || isDocente) ? '/api/inventario' : '/api/estudiante/catalogo';
         const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -393,6 +445,7 @@ function renderItems(items) {
     }
 
     const isAdmin = localStorage.getItem('user_role_id') === '1';
+    const isDocente = localStorage.getItem('user_role_id') === '3';
     let lowStockCount = 0;
 
     // Control widget display
@@ -444,7 +497,7 @@ function renderItems(items) {
                 
                 <div>
                     <div class="item-meta">
-                        <div class="meta-field">Ubicación: <span>${item.espacio?.nombre || 'Laboratorio'}</span></div>
+                        <div class="meta-field">Ubicación: <span>${getDisplayUbicacion(item)}</span></div>
                         <div class="meta-field">Categoría: <span>${item.categoria?.nombre || 'General'}</span></div>
                     </div>
                     <div class="item-meta" style="border-top: none; padding-top: 4px;">
@@ -588,22 +641,23 @@ function updateCartUI() {
     const floatBtn = document.getElementById('cartFloatingBtn');
     if(floatBtn) floatBtn.style.display = cart.length > 0 ? 'flex' : 'none';
     
-    const cartItemsList = document.getElementById('cartItemsList');
-    if(cartItemsList) {
-        cartItemsList.innerHTML = '';
+    const cartTableBody = document.getElementById('cartTableBody');
+    if(cartTableBody) {
+        cartTableBody.innerHTML = '';
+        if (cart.length === 0) {
+            cartTableBody.innerHTML = '<tr><td colspan="3" style="text-align: center;">El carrito está vacío.</td></tr>';
+            return;
+        }
         cart.forEach((item, index) => {
-            const div = document.createElement('div');
-            div.style.display = 'flex';
-            div.style.justifyContent = 'space-between';
-            div.style.marginBottom = '10px';
-            div.style.padding = '8px';
-            div.style.background = 'rgba(255,255,255,0.05)';
-            div.style.borderRadius = '6px';
-            div.innerHTML = `
-                <span><strong>${item.cantidad}x</strong> ${item.nombreItem}</span>
-                <button type="button" onclick="removeFromCart(${index})" class="btn-icon" style="color: var(--color-danger); padding: 0;">❌</button>
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="padding: 10px;">${item.nombreItem}</td>
+                <td style="padding: 10px; text-align: center;">${item.cantidad}</td>
+                <td style="padding: 10px; text-align: center;">
+                    <button type="button" onclick="removeFromCart(${index})" class="btn-icon" style="color: var(--color-danger); padding: 0;">❌</button>
+                </td>
             `;
-            cartItemsList.appendChild(div);
+            cartTableBody.appendChild(tr);
         });
     }
 }
@@ -645,17 +699,18 @@ function closeCartModal() {
     document.getElementById('cartModal').style.display = 'none';
 }
 
-async function submitCart(e) {
+async function handleCartSubmit(e) {
     e.preventDefault();
     if(cart.length === 0) return;
     
+    const returnDateVal = document.getElementById('loanReturnDate') ? document.getElementById('loanReturnDate').value : null;
     const requestData = {
-        Items: cart,
-        FechaDevolucion: document.getElementById('loanReturnDate') ? document.getElementById('loanReturnDate').value : null
+        Items: cart.map(i => ({ NombreItem: i.nombreItem, Cantidad: i.cantidad })),
+        FechaDevolucion: returnDateVal && returnDateVal.trim() !== "" ? returnDateVal : null
     };
 
     try {
-        const response = await fetch('/api/estudiante/prestamo', {
+        const response = await fetch('/api/estudiante/prestamo-batch', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -683,6 +738,41 @@ async function submitCart(e) {
     }
 }
 
+function generateItemCode() {
+    const categorySelect = document.getElementById('itemCategory');
+    if (!categorySelect) return;
+    
+    const categoryId = parseInt(categorySelect.value);
+    const category = categories.find(c => c.categoriaId === categoryId);
+    if (!category) return;
+
+    // Map category name to a 3-letter prefix
+    let prefix = 'EQU';
+    const name = category.nombre.toUpperCase();
+    if (name.includes('PLACA') || name.includes('DESARROLLO')) {
+        prefix = 'DEV';
+    } else if (name.includes('MEDIC') || name.includes('INSTRUMENTO')) {
+        prefix = 'INS';
+    } else if (name.includes('SENSOR') || name.includes('COMPONENTE')) {
+        prefix = 'SEN';
+    } else {
+        // Strip non-alphabetic characters and take first 3 chars
+        prefix = name.replace(/[^A-Z]/g, '').substring(0, 3);
+        if (prefix.length < 3) {
+            prefix = (prefix + 'EQU').substring(0, 3);
+        }
+    }
+
+    // Generate random 4-digit number
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    const code = `${prefix}-${randomNum}`;
+    
+    const codeInput = document.getElementById('itemCode');
+    if (codeInput) {
+        codeInput.value = code;
+    }
+}
+
 // Open create dialog modal
 function openCreateModal() {
     isEditing = false;
@@ -692,8 +782,12 @@ function openCreateModal() {
     document.getElementById('modalAlert').style.display = 'none';
     
     // Default selects
-    if (categories.length > 0) document.getElementById('itemCategory').value = categories[0].categoriaId;
+    if (categories.length > 0) {
+        document.getElementById('itemCategory').value = categories[0].categoriaId;
+        generateItemCode();
+    }
     if (spaces.length > 0) document.getElementById('itemSpace').value = spaces[0].espacioId;
+    if (document.getElementById('itemGaveta')) document.getElementById('itemGaveta').value = '';
     
     const cantidadGroup = document.getElementById('cantidadGroup');
     if (cantidadGroup) cantidadGroup.style.display = 'block';
@@ -735,7 +829,24 @@ async function openEditModal(id) {
             document.getElementById('itemCategory').value = item.categoriaId;
             document.getElementById('itemSpace').value = item.espacioId;
             document.getElementById('itemDescription').value = item.descripcion || '';
-            document.getElementById('itemObservations').value = item.observaciones || '';
+            
+            // Parse Gaveta from observations
+            let gavetaVal = "";
+            let obsClean = item.observaciones || "";
+            if (obsClean.startsWith("[Gaveta: ")) {
+                const endIdx = obsClean.indexOf("] ");
+                if (endIdx !== -1) {
+                    gavetaVal = obsClean.substring(9, endIdx);
+                    obsClean = obsClean.substring(endIdx + 2);
+                } else if (obsClean.endsWith("]")) {
+                    gavetaVal = obsClean.substring(9, obsClean.length - 1);
+                    obsClean = "";
+                }
+            }
+            if (document.getElementById('itemGaveta')) {
+                document.getElementById('itemGaveta').value = gavetaVal;
+            }
+            document.getElementById('itemObservations').value = obsClean;
             if (document.getElementById('itemCantidad')) {
                 document.getElementById('itemCantidad').value = item.stock || 1;
             }
@@ -782,7 +893,14 @@ async function handleFormSubmit(e) {
         categoriaId: parseInt(document.getElementById('itemCategory').value),
         espacioId: parseInt(document.getElementById('itemSpace').value),
         descripcion: document.getElementById('itemDescription').value.trim() || null,
-        observaciones: document.getElementById('itemObservations').value.trim() || null,
+        observaciones: (() => {
+            const gaveta = document.getElementById('itemGaveta') ? document.getElementById('itemGaveta').value : '';
+            let obs = document.getElementById('itemObservations').value.trim();
+            if (gaveta) {
+                obs = `[Gaveta: ${gaveta}]` + (obs ? ` ${obs}` : '');
+            }
+            return obs || null;
+        })(),
         stock: document.getElementById('itemCantidad') ? parseInt(document.getElementById('itemCantidad').value) : 1,
         stockMinimo: document.getElementById('itemStockMinimo') ? parseInt(document.getElementById('itemStockMinimo').value) : 1,
         esPublico: document.getElementById('itemIsPublic') ? (document.getElementById('itemIsPublic').checked ? 1 : 0) : 1
@@ -992,12 +1110,27 @@ async function updateRequestStatusModal(codigoReserva, estado) {
     }
 }
 
-async function deleteItem(id) {
-    const confirmed = await showConfirm('¿Estás seguro de que deseas eliminar (dar de baja) este elemento?');
-    if (!confirmed) return;
+function deleteItem(id) {
+    document.getElementById('deleteItemId').value = id;
+    document.getElementById('deleteItemReason').value = '';
+    document.getElementById('deleteItemModal').style.display = 'flex';
+}
+
+function closeDeleteItemModal() {
+    document.getElementById('deleteItemModal').style.display = 'none';
+}
+
+async function confirmDeleteItem() {
+    const id = document.getElementById('deleteItemId').value;
+    const motivo = document.getElementById('deleteItemReason').value.trim();
+
+    if (!motivo) {
+        showToast('El motivo de la baja es obligatorio.', 'error');
+        return;
+    }
 
     try {
-        const response = await fetch(`/api/inventario/${id}`, {
+        const response = await fetch(`/api/inventario/${id}?motivo=${encodeURIComponent(motivo)}`, {
             method: 'DELETE',
             headers: {
                 'Authorization': `Bearer ${token}`
@@ -1005,14 +1138,15 @@ async function deleteItem(id) {
         });
 
         const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.mensaje || 'Error al eliminar el elemento.');
+        if (response.ok) {
+            closeDeleteItemModal();
+            showToast('Elemento dado de baja correctamente.', 'success');
+            await fetchInventory(); // Reload inventory
+        } else {
+            showToast('Error: ' + data.mensaje, 'error');
         }
-
-        showToast('Elemento dado de baja correctamente.', 'success');
-        await fetchInventory(); // Reload inventory
     } catch (error) {
-        showToast(error.message, 'error');
+        showToast('Error de conexión al dar de baja el elemento.', 'error');
     }
 }
 
@@ -1029,10 +1163,16 @@ function closeAddStockModal() {
 async function confirmAgregarStock() {
     const id = document.getElementById('addStockItemId').value;
     const cantidad = document.getElementById('addStockAmount').value;
+    const motivo = document.getElementById('addStockReason').value;
 
     const cantidadNum = parseInt(cantidad);
-    if (isNaN(cantidadNum) || cantidadNum <= 0) {
-        showToast('La cantidad debe ser un número mayor a 0.', 'error');
+    if (isNaN(cantidadNum) || cantidadNum === 0) {
+        showToast('La cantidad debe ser un número diferente de 0.', 'error');
+        return;
+    }
+
+    if (!motivo || motivo.trim() === '') {
+        showToast('El motivo de la modificación de stock es obligatorio.', 'error');
         return;
     }
 
@@ -1043,12 +1183,13 @@ async function confirmAgregarStock() {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ cantidad: cantidadNum })
+            body: JSON.stringify({ cantidad: cantidadNum, motivo: motivo })
         });
 
         const data = await response.json();
         if (response.ok) {
             closeAddStockModal();
+            document.getElementById('addStockReason').value = ''; // Clear motivo field
             showToast(data.mensaje, 'success');
             fetchInventory();
         } else {
@@ -1056,6 +1197,52 @@ async function confirmAgregarStock() {
         }
     } catch (error) {
         showToast('Error de conexión al agregar stock.', 'error');
+    }
+}
+
+function openAddSpaceModal() {
+    document.getElementById('newSpaceName').value = '';
+    document.getElementById('addSpaceModal').style.display = 'flex';
+}
+
+function closeAddSpaceModal() {
+    document.getElementById('addSpaceModal').style.display = 'none';
+}
+
+async function confirmAgregarEspacio() {
+    const nameInput = document.getElementById('newSpaceName');
+    const name = nameInput.value.trim();
+
+    if (!name) {
+        showToast('El nombre de la ubicación física es obligatorio.', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/inventario/espacio', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ nombre: name })
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+            closeAddSpaceModal();
+            showToast(data.mensaje, 'success');
+            
+            // Reload metadata to populate select dropdowns
+            await fetchMetadata();
+            
+            // Auto-select the newly created space
+            document.getElementById('itemSpace').value = data.espacioId;
+        } else {
+            showToast('Error: ' + data.mensaje, 'error');
+        }
+    } catch (error) {
+        showToast('Error de conexión al agregar ubicación física.', 'error');
     }
 }
 
@@ -1563,8 +1750,10 @@ async function solicitarDevolucion(codigoReserva) {
         const response = await fetch(`/api/estudiante/prestamo/${codigoReserva}/devolver`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${token}`
-            }
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ EvidenciaUrl: null, Comentario: "Solicitud de devolución" })
         });
 
         const data = await response.json();
@@ -1749,7 +1938,7 @@ function openItemInfoModal(id) {
             <div><strong>Marca:</strong><br> ${item.marca || 'N/A'}</div>
             <div><strong>Modelo:</strong><br> ${item.modelo || 'N/A'}</div>
             <div><strong>Categoría:</strong><br> ${item.categoria?.nombre || 'General'}</div>
-            <div><strong>Ubicación:</strong><br> ${item.espacio?.nombre || 'Laboratorio'}</div>
+            <div><strong>Ubicación:</strong><br> ${getDisplayUbicacion(item)}</div>
         </div>
         <p><strong>Descripción Técnica:</strong></p>
         <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); white-space: pre-wrap;">${item.descripcion || 'Sin descripción disponible.'}</div>
@@ -1812,6 +2001,15 @@ function closeCategoryModal() {
     document.getElementById('categoryModal').style.display = 'none';
 }
 
+function openCreateCategoryModal() {
+    isEditingCategory = false;
+    document.getElementById('categoryModalTitle').textContent = 'Agregar Nueva Categoría';
+    document.getElementById('categoryId').value = '';
+    document.getElementById('categoryName').value = '';
+    document.getElementById('categoryModalAlert').style.display = 'none';
+    document.getElementById('categoryModal').style.display = 'flex';
+}
+
 function editCategory(id, nombre) {
     isEditingCategory = true;
     document.getElementById('categoryModalTitle').textContent = 'Editar Categoría';
@@ -1824,7 +2022,7 @@ function editCategory(id, nombre) {
 async function handleCategorySubmit(e) {
     e.preventDefault();
     const id = document.getElementById('categoryId').value;
-    const nombre = document.getElementById('categoryName').value;
+    const nombre = document.getElementById('categoryName').value.trim();
     const url = isEditingCategory ? `/api/categorias/${id}` : '/api/categorias';
     const method = isEditingCategory ? 'PUT' : 'POST';
 
@@ -1842,6 +2040,19 @@ async function handleCategorySubmit(e) {
             closeCategoryModal();
             fetchCategories();
             showToast('Categoría guardada exitosamente.', 'success');
+            
+            // Reload metadata in the frontend dropdown lists
+            await fetchMetadata();
+            
+            // Auto-select category and auto-generate code if adding an item
+            if (document.getElementById('itemModal').style.display === 'flex' && !isEditing) {
+                const newCat = categories.find(c => c.nombre.toLowerCase() === nombre.toLowerCase());
+                if (newCat) {
+                    document.getElementById('itemCategory').value = newCat.categoriaId;
+                    generateItemCode();
+                }
+            }
+
             await fetchInventory(); // Refresh main inventory metadata
         } else {
             const data = await response.json();

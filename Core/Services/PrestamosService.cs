@@ -174,37 +174,42 @@ namespace LaboratorioPUCE.Core.Services
 
         public async Task<bool> ActualizarEstadoSolicitudAsync(string codigoReserva, string nuevoEstado, string? comentarioAdmin)
         {
-            var prestamo = await _context.Prestamos
+            var prestamos = await _context.Prestamos
                 .Include(p => p.Item)
-                .FirstOrDefaultAsync(p => p.CodigoReserva == codigoReserva);
+                .Where(p => p.CodigoReserva == codigoReserva)
+                .ToListAsync();
 
-            if (prestamo == null)
+            if (prestamos == null || !prestamos.Any())
                 return false;
 
-            prestamo.Estado = nuevoEstado;
-            prestamo.ComentarioAdmin = comentarioAdmin;
+            foreach (var prestamo in prestamos)
+            {
+                prestamo.Estado = nuevoEstado;
+                prestamo.ComentarioAdmin = comentarioAdmin;
 
-            if (nuevoEstado == "APROBADO")
-            {
-                prestamo.FechaAprobacion = DateTime.UtcNow;
-            }
-            else if (nuevoEstado == "RECHAZADO")
-            {
-                // Devolver el stock
-                if (prestamo.Item != null)
+                if (nuevoEstado == "APROBADO")
                 {
-                    prestamo.Item.Stock += prestamo.Cantidad;
+                    prestamo.FechaAprobacion = DateTime.UtcNow;
+                }
+                else if (nuevoEstado == "RECHAZADO")
+                {
+                    // Devolver el stock
+                    if (prestamo.Item != null)
+                    {
+                        prestamo.Item.Stock += prestamo.Cantidad;
+                    }
                 }
             }
 
             await _context.SaveChangesAsync();
 
+            var primerPrestamo = prestamos.First();
             string mensaje = nuevoEstado == "APROBADO" 
                 ? $"Tu préstamo {codigoReserva} ha sido aprobado." 
                 : $"Tu préstamo {codigoReserva} ha sido rechazado.";
             
             await _notificacionesService.CrearNotificacionAsync(
-                prestamo.UsuarioId,
+                primerPrestamo.UsuarioId,
                 nuevoEstado == "APROBADO" ? "Préstamo Aprobado" : "Préstamo Rechazado",
                 mensaje,
                 codigoReserva,
@@ -275,54 +280,60 @@ namespace LaboratorioPUCE.Core.Services
 
         public async Task<bool> MarcarComoDevueltoAsync(string codigoReserva, string? comentarioAdmin, int cantidadDefectuosa = 0, string? evidenciaUrl = null)
         {
-            var prestamo = await _context.Prestamos
+            var prestamos = await _context.Prestamos
                 .Include(p => p.Item)
-                .FirstOrDefaultAsync(p => p.CodigoReserva == codigoReserva);
+                .Where(p => p.CodigoReserva == codigoReserva)
+                .ToListAsync();
 
-            if (prestamo == null || (prestamo.Estado != "APROBADO" && prestamo.Estado != "PENDIENTE_DEVOLUCION"))
+            if (prestamos == null || !prestamos.Any() || prestamos.Any(p => p.Estado != "APROBADO" && p.Estado != "PENDIENTE_DEVOLUCION"))
                 return false;
 
-            if (cantidadDefectuosa < 0 || cantidadDefectuosa > prestamo.Cantidad)
-                return false;
+            int defectuosasRestantes = cantidadDefectuosa;
 
-            prestamo.Estado = "DEVUELTO";
-            if (!string.IsNullOrEmpty(evidenciaUrl))
+            foreach (var prestamo in prestamos)
             {
-                prestamo.EvidenciaUrl = evidenciaUrl;
-            }
-            
-            if (!string.IsNullOrEmpty(comentarioAdmin) || cantidadDefectuosa > 0)
-            {
-                string extraInfo = cantidadDefectuosa > 0 ? $" ({cantidadDefectuosa} Defectuosos)" : "";
-                string commentBody = !string.IsNullOrEmpty(comentarioAdmin) ? comentarioAdmin : "Sin comentario extra.";
-                
-                prestamo.ComentarioAdmin = string.IsNullOrEmpty(prestamo.ComentarioAdmin) 
-                    ? $"Devolución{extraInfo}: {commentBody}"
-                    : prestamo.ComentarioAdmin + $" | Devolución{extraInfo}: {commentBody}";
-            }
-
-            // Devolver el stock SOLO para los elementos en buen estado
-            if (prestamo.Item != null)
-            {
-                int cantidadBuena = prestamo.Cantidad - cantidadDefectuosa;
-                if (cantidadBuena > 0)
+                prestamo.Estado = "DEVUELTO";
+                if (!string.IsNullOrEmpty(evidenciaUrl))
                 {
-                    prestamo.Item.Stock += cantidadBuena;
+                    prestamo.EvidenciaUrl = evidenciaUrl;
                 }
-                
-                if (cantidadDefectuosa > 0)
+
+                int defectuosasEsteItem = Math.Min(defectuosasRestantes, prestamo.Cantidad);
+                defectuosasRestantes -= defectuosasEsteItem;
+
+                if (!string.IsNullOrEmpty(comentarioAdmin) || defectuosasEsteItem > 0)
                 {
-                    prestamo.Item.StockDefectuoso += cantidadDefectuosa;
+                    string extraInfo = defectuosasEsteItem > 0 ? $" ({defectuosasEsteItem} Defectuosos)" : "";
+                    string commentBody = !string.IsNullOrEmpty(comentarioAdmin) ? comentarioAdmin : "Sin comentario extra.";
+                    
+                    prestamo.ComentarioAdmin = string.IsNullOrEmpty(prestamo.ComentarioAdmin) 
+                        ? $"Devolución{extraInfo}: {commentBody}"
+                        : prestamo.ComentarioAdmin + $" | Devolución{extraInfo}: {commentBody}";
+                }
+
+                if (prestamo.Item != null)
+                {
+                    int cantidadBuena = prestamo.Cantidad - defectuosasEsteItem;
+                    if (cantidadBuena > 0)
+                    {
+                        prestamo.Item.Stock += cantidadBuena;
+                    }
+                    
+                    if (defectuosasEsteItem > 0)
+                    {
+                        prestamo.Item.StockDefectuoso += defectuosasEsteItem;
+                    }
                 }
             }
 
             await _context.SaveChangesAsync();
 
+            var primer = prestamos.First();
             await _notificacionesService.CrearNotificacionAsync(
-                prestamo.UsuarioId,
+                primer.UsuarioId,
                 "Devolución Registrada",
-                $"Tu préstamo de {prestamo.Item?.Nombre} ha sido registrado como devuelto.",
-                prestamo.CodigoReserva,
+                $"Tu préstamo con código {codigoReserva} ha sido registrado como devuelto.",
+                codigoReserva,
                 "INFO"
             );
 
@@ -387,30 +398,35 @@ namespace LaboratorioPUCE.Core.Services
 
         public async Task<bool> RechazarDevolucionAsync(string codigoReserva, string? comentarioAdmin, string? evidenciaUrl = null)
         {
-            var prestamo = await _context.Prestamos
-                .FirstOrDefaultAsync(p => p.CodigoReserva == codigoReserva);
+            var prestamos = await _context.Prestamos
+                .Where(p => p.CodigoReserva == codigoReserva)
+                .ToListAsync();
 
-            if (prestamo == null || prestamo.Estado != "PENDIENTE_DEVOLUCION")
+            if (prestamos == null || !prestamos.Any() || prestamos.Any(p => p.Estado != "PENDIENTE_DEVOLUCION"))
                 return false;
 
-            // Se rechaza la devolución, el ítem vuelve a ser responsabilidad del estudiante.
-            prestamo.Estado = "APROBADO";
-            if (!string.IsNullOrEmpty(evidenciaUrl))
+            foreach (var prestamo in prestamos)
             {
-                prestamo.EvidenciaUrl = evidenciaUrl;
-            }
-            
-            if (!string.IsNullOrEmpty(comentarioAdmin))
-            {
-                prestamo.ComentarioAdmin = string.IsNullOrEmpty(prestamo.ComentarioAdmin) 
-                    ? $"Devolución Rechazada: {comentarioAdmin}"
-                    : prestamo.ComentarioAdmin + $" | Devolución Rechazada: {comentarioAdmin}";
+                // Se rechaza la devolución, el ítem vuelve a ser responsabilidad del estudiante.
+                prestamo.Estado = "APROBADO";
+                if (!string.IsNullOrEmpty(evidenciaUrl))
+                {
+                    prestamo.EvidenciaUrl = evidenciaUrl;
+                }
+                
+                if (!string.IsNullOrEmpty(comentarioAdmin))
+                {
+                    prestamo.ComentarioAdmin = string.IsNullOrEmpty(prestamo.ComentarioAdmin) 
+                        ? $"Devolución Rechazada: {comentarioAdmin}"
+                        : prestamo.ComentarioAdmin + $" | Devolución Rechazada: {comentarioAdmin}";
+                }
             }
 
             await _context.SaveChangesAsync();
 
+            var primer = prestamos.First();
             await _notificacionesService.CrearNotificacionAsync(
-                prestamo.UsuarioId,
+                primer.UsuarioId,
                 "Devolución Rechazada",
                 $"Tu solicitud de devolución para la reserva {codigoReserva} fue rechazada.",
                 codigoReserva,
