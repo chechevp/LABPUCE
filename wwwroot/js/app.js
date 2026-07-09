@@ -63,6 +63,12 @@ async function validateSession() {
             const menuStats = document.getElementById('menu-stats');
             if(menuStats) menuStats.style.display = 'flex';
             
+            const menuCategories = document.getElementById('menu-categories');
+            if(menuCategories) menuCategories.style.display = 'flex';
+            
+            const menuAudit = document.getElementById('menu-audit');
+            if(menuAudit) menuAudit.style.display = 'flex';
+            
             const menuBloqueados = document.getElementById('menu-bloqueados');
             if(menuBloqueados) menuBloqueados.style.display = 'flex';
             
@@ -447,6 +453,24 @@ function renderItems(items) {
                     ${adminButtons}
                 </div>
             `;
+        } else if (isDocente) {
+            card.className = `item-card glass-panel`;
+            card.innerHTML = `
+                <div>
+                    <div class="card-header">
+                        <span class="item-code">${item.codigoActivo || 'S/M'}</span>
+                        <span class="item-status status-disponible">Disponibles: ${item.stock}</span>
+                    </div>
+                    <h3 class="item-name">${item.nombre}</h3>
+                    <p class="item-desc">${item.descripcion || 'Sin descripción disponible.'}</p>
+                    ${item.imagenUrl ? `<div style="text-align: center; margin-top: 10px;"><img src="${item.imagenUrl}" style="max-height: 120px; border-radius: 8px;"></div>` : ''}
+                </div>
+                <div>
+                    <button onclick="openItemInfoModal(${item.itemId})" class="btn btn-secondary" style="width: 100%; margin-top: 15px;">
+                        Más información
+                    </button>
+                </div>
+            `;
         } else {
             // Student View (CatalogoItemDto)
             card.className = `item-card glass-panel`;
@@ -463,7 +487,7 @@ function renderItems(items) {
                     ${item.imagenUrl ? `<div style="text-align: center; margin-top: 10px;"><img src="${item.imagenUrl}" style="max-height: 120px; border-radius: 8px;"></div>` : ''}
                 </div>
                 <div>
-                    <button onclick="openLoanModal('${item.nombre.replace(/'/g, "\\'")}', ${item.stockDisponible})" class="btn btn-primary" style="width: 100%; margin-top: 15px;" ${!hasStock || hasOverdueLoans ? 'disabled' : ''}>
+                    <button onclick="openAddToCartModal('${item.nombre.replace(/'/g, "\\'")}', ${item.stockDisponible})" class="btn btn-primary" style="width: 100%; margin-top: 15px;" ${!hasStock || hasOverdueLoans ? 'disabled' : ''}>
                         ${hasOverdueLoans ? 'Bloqueado (Vencido)' : (hasStock ? 'Solicitar Préstamo' : 'Sin Stock')}
                     </button>
                 </div>
@@ -492,12 +516,13 @@ function filterItems() {
     const query = document.getElementById('searchInput').value.toLowerCase().trim();
     const categoryVal = document.getElementById('categoryFilter').value;
     const isAdmin = localStorage.getItem('user_role_id') === '1';
+    const isDocente = localStorage.getItem('user_role_id') === '3';
 
     const filtered = allItems.filter(item => {
         let matchesQuery = false;
         let matchesCategory = true;
         
-        if (isAdmin) {
+        if (isAdmin || isDocente) {
             matchesQuery = item.nombre.toLowerCase().includes(query) || 
                            item.codigoActivo.toLowerCase().includes(query) ||
                            (item.descripcion && item.descripcion.toLowerCase().includes(query)) ||
@@ -516,17 +541,81 @@ function filterItems() {
     renderItems(filtered);
 }
 
-// Loan Functions
-function openLoanModal(itemName, maxStock) {
-    document.getElementById('loanItemName').value = itemName;
-    document.getElementById('loanItemDisplayName').textContent = itemName;
+// --- Cart Logic ---
+let cart = [];
+
+function openAddToCartModal(itemName, maxStock) {
+    document.getElementById('addToCartItemName').value = itemName;
+    document.getElementById('addToCartItemDisplayName').textContent = itemName;
+    const qtyInput = document.getElementById('addToCartQuantity');
+    qtyInput.max = maxStock;
+    qtyInput.value = 1;
+    document.getElementById('addToCartMaxStockDisplay').textContent = `Máximo disponible: ${maxStock}`;
+    document.getElementById('addToCartModal').style.display = 'flex';
+}
+
+function closeAddToCartModal() {
+    document.getElementById('addToCartModal').style.display = 'none';
+}
+
+function confirmAddToCart(e) {
+    e.preventDefault();
+    const itemName = document.getElementById('addToCartItemName').value;
+    const maxStock = parseInt(document.getElementById('addToCartQuantity').max);
+    const qty = parseInt(document.getElementById('addToCartQuantity').value);
     
-    const quantityInput = document.getElementById('loanQuantity');
-    quantityInput.max = maxStock;
-    quantityInput.value = 1;
-    document.getElementById('loanMaxStock').textContent = `Máximo disponible: ${maxStock}`;
+    // check if already in cart
+    const existing = cart.find(i => i.nombreItem === itemName);
+    if (existing) {
+        if (existing.cantidad + qty > maxStock) {
+            showToast('No puedes exceder el stock máximo disponible', 'error');
+            return;
+        }
+        existing.cantidad += qty;
+    } else {
+        cart.push({ nombreItem: itemName, cantidad: qty });
+    }
     
-    document.getElementById('loanAlert').style.display = 'none';
+    updateCartUI();
+    closeAddToCartModal();
+    showToast('Añadido al carrito', 'success');
+}
+
+function updateCartUI() {
+    const badge = document.getElementById('cartCountBadge');
+    if(badge) badge.textContent = cart.length;
+    
+    const floatBtn = document.getElementById('cartFloatingBtn');
+    if(floatBtn) floatBtn.style.display = cart.length > 0 ? 'flex' : 'none';
+    
+    const cartItemsList = document.getElementById('cartItemsList');
+    if(cartItemsList) {
+        cartItemsList.innerHTML = '';
+        cart.forEach((item, index) => {
+            const div = document.createElement('div');
+            div.style.display = 'flex';
+            div.style.justifyContent = 'space-between';
+            div.style.marginBottom = '10px';
+            div.style.padding = '8px';
+            div.style.background = 'rgba(255,255,255,0.05)';
+            div.style.borderRadius = '6px';
+            div.innerHTML = `
+                <span><strong>${item.cantidad}x</strong> ${item.nombreItem}</span>
+                <button type="button" onclick="removeFromCart(${index})" class="btn-icon" style="color: var(--color-danger); padding: 0;">❌</button>
+            `;
+            cartItemsList.appendChild(div);
+        });
+    }
+}
+
+function removeFromCart(index) {
+    cart.splice(index, 1);
+    updateCartUI();
+    if(cart.length === 0) closeCartModal();
+}
+
+function openCartModal() {
+    if(cart.length === 0) return;
     
     // Set date constraints
     const today = new Date();
@@ -548,53 +637,49 @@ function openLoanModal(itemName, maxStock) {
             altFormat: "j \\de F, Y",
         });
     }
-
-    document.getElementById('loanModal').style.display = 'flex';
+    
+    document.getElementById('cartModal').style.display = 'flex';
 }
 
-function closeLoanModal() {
-    document.getElementById('loanModal').style.display = 'none';
+function closeCartModal() {
+    document.getElementById('cartModal').style.display = 'none';
 }
 
-async function handleLoanSubmit(e) {
+async function submitCart(e) {
     e.preventDefault();
-    const alertBox = document.getElementById('loanAlert');
-    alertBox.style.display = 'none';
-
+    if(cart.length === 0) return;
+    
     const requestData = {
-        nombreItem: document.getElementById('loanItemName').value,
-        cantidad: parseInt(document.getElementById('loanQuantity').value),
-        fechaDevolucion: document.getElementById('loanReturnDate') ? document.getElementById('loanReturnDate').value : null
+        Items: cart,
+        FechaDevolucion: document.getElementById('loanReturnDate') ? document.getElementById('loanReturnDate').value : null
     };
-
-    const maxStock = parseInt(document.getElementById('loanQuantity').max);
-    if (requestData.cantidad > maxStock) {
-        alertBox.textContent = `No hay suficiente stock. (Máximo: ${maxStock})`;
-        alertBox.style.display = 'block';
-        return;
-    }
 
     try {
         const response = await fetch('/api/estudiante/prestamo', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify(requestData)
         });
 
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.mensaje || 'Error al procesar la solicitud.');
+        if (response.ok) {
+            cart = [];
+            updateCartUI();
+            closeCartModal();
+            showToast('Préstamo solicitado exitosamente.', 'success');
+            await fetchInventory();
+            if (typeof fetchStudentHistory === 'function') {
+                await fetchStudentHistory(); // refresh student history
+            }
+        } else {
+            const data = await response.json();
+            showToast(data.mensaje || 'Error al solicitar el préstamo.', 'error');
         }
-
-        closeLoanModal();
-        showToast('Solicitud enviada exitosamente.', 'success');
-        await fetchInventory(); // Refresh catalog
-    } catch (err) {
-        alertBox.textContent = err.message;
-        alertBox.style.display = 'block';
+    } catch (error) {
+        console.error('Error submitting cart:', error);
+        showToast('Error de red. Intenta nuevamente.', 'error');
     }
 }
 
@@ -766,6 +851,10 @@ function showSection(sectionId, element) {
         fetchEstadisticas();
     } else if (sectionId === 'section-bloqueados') {
         fetchBloqueados();
+    } else if (sectionId === 'section-categories') {
+        fetchCategories();
+    } else if (sectionId === 'section-audit') {
+        fetchAuditLogs();
     }
 }
 
@@ -1645,5 +1734,179 @@ async function notificarEstudiante(usuarioId) {
     } catch (err) {
         console.error('Error', err);
         showToast('Error de conexión', 'error');
+    }
+}
+
+// --- Modals for Docente ---
+function openItemInfoModal(id) {
+    const item = allItems.find(i => i.itemId === id);
+    if (!item) return;
+
+    const content = document.getElementById('itemInfoContent');
+    content.innerHTML = `
+        <h4 style="color: var(--text-primary); margin-bottom: 10px; font-size: 1.2rem;">${item.nombre}</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+            <div><strong>Marca:</strong><br> ${item.marca || 'N/A'}</div>
+            <div><strong>Modelo:</strong><br> ${item.modelo || 'N/A'}</div>
+            <div><strong>Categoría:</strong><br> ${item.categoria?.nombre || 'General'}</div>
+            <div><strong>Ubicación:</strong><br> ${item.espacio?.nombre || 'Laboratorio'}</div>
+        </div>
+        <p><strong>Descripción Técnica:</strong></p>
+        <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); white-space: pre-wrap;">${item.descripcion || 'Sin descripción disponible.'}</div>
+    `;
+
+    document.getElementById('itemInfoModal').style.display = 'flex';
+}
+
+function closeItemInfoModal() {
+    document.getElementById('itemInfoModal').style.display = 'none';
+}
+
+// --- Admin Categories ---
+async function fetchCategories() {
+    const container = document.getElementById('categoriesTableBody');
+    if(!container) return;
+    container.innerHTML = '<tr><td colspan="3">Cargando categorías...</td></tr>';
+
+    try {
+        const response = await fetch('/api/categorias', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await response.json();
+        
+        container.innerHTML = '';
+        if(data.length === 0) {
+            container.innerHTML = '<tr><td colspan="3">No hay categorías.</td></tr>';
+            return;
+        }
+
+        data.forEach(cat => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">${cat.categoriaId}</td>
+                <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">${cat.nombre}</td>
+                <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">
+                    <button class="btn btn-secondary" onclick="editCategory(${cat.categoriaId}, '${cat.nombre.replace(/'/g, "\\'")}')">Editar</button>
+                    <button class="btn btn-secondary" style="background: var(--color-danger); color: white; border: none;" onclick="deleteCategory(${cat.categoriaId})">Eliminar</button>
+                </td>
+            `;
+            container.appendChild(tr);
+        });
+    } catch (err) {
+        container.innerHTML = '<tr><td colspan="3">Error al cargar categorías.</td></tr>';
+    }
+}
+
+let isEditingCategory = false;
+
+function openCategoryModal() {
+    isEditingCategory = false;
+    document.getElementById('categoryModalTitle').textContent = 'Nueva Categoría';
+    document.getElementById('categoryId').value = '';
+    document.getElementById('categoryName').value = '';
+    document.getElementById('categoryModalAlert').style.display = 'none';
+    document.getElementById('categoryModal').style.display = 'flex';
+}
+
+function closeCategoryModal() {
+    document.getElementById('categoryModal').style.display = 'none';
+}
+
+function editCategory(id, nombre) {
+    isEditingCategory = true;
+    document.getElementById('categoryModalTitle').textContent = 'Editar Categoría';
+    document.getElementById('categoryId').value = id;
+    document.getElementById('categoryName').value = nombre;
+    document.getElementById('categoryModalAlert').style.display = 'none';
+    document.getElementById('categoryModal').style.display = 'flex';
+}
+
+async function handleCategorySubmit(e) {
+    e.preventDefault();
+    const id = document.getElementById('categoryId').value;
+    const nombre = document.getElementById('categoryName').value;
+    const url = isEditingCategory ? `/api/categorias/${id}` : '/api/categorias';
+    const method = isEditingCategory ? 'PUT' : 'POST';
+
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ CategoriaId: isEditingCategory ? parseInt(id) : 0, Nombre: nombre })
+        });
+
+        if (response.ok) {
+            closeCategoryModal();
+            fetchCategories();
+            showToast('Categoría guardada exitosamente.', 'success');
+            await fetchInventory(); // Refresh main inventory metadata
+        } else {
+            const data = await response.json();
+            document.getElementById('categoryModalAlert').textContent = data.mensaje || 'Error al guardar.';
+            document.getElementById('categoryModalAlert').style.display = 'block';
+        }
+    } catch (error) {
+        document.getElementById('categoryModalAlert').textContent = 'Error de red.';
+        document.getElementById('categoryModalAlert').style.display = 'block';
+    }
+}
+
+async function deleteCategory(id) {
+    if (!confirm('¿Estás seguro de que deseas eliminar esta categoría? (Podría afectar ítems existentes)')) return;
+
+    try {
+        const response = await fetch(`/api/categorias/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+            fetchCategories();
+            showToast('Categoría eliminada.', 'success');
+            await fetchInventory();
+        } else {
+            const data = await response.json();
+            showToast(data.mensaje || 'Error al eliminar.', 'error');
+        }
+    } catch (error) {
+        showToast('Error de red.', 'error');
+    }
+}
+
+// --- Audit Logs ---
+async function fetchAuditLogs() {
+    const container = document.getElementById('auditTableBody');
+    if(!container) return;
+    container.innerHTML = '<tr><td colspan="5">Cargando logs...</td></tr>';
+
+    try {
+        const response = await fetch('/api/auditoria', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await response.json();
+        
+        container.innerHTML = '';
+        if(data.length === 0) {
+            container.innerHTML = '<tr><td colspan="5">No hay logs registrados.</td></tr>';
+            return;
+        }
+
+        data.forEach(log => {
+            const tr = document.createElement('tr');
+            const d = new Date(log.fechaHora);
+            tr.innerHTML = `
+                <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">${d.toLocaleDateString()} ${d.toLocaleTimeString()}</td>
+                <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">${log.usuario}</td>
+                <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">${log.accion}</td>
+                <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">${log.detalle}</td>
+                <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">${log.referenciaId || '-'}</td>
+            `;
+            container.appendChild(tr);
+        });
+    } catch (err) {
+        container.innerHTML = '<tr><td colspan="5">Error al cargar logs.</td></tr>';
     }
 }

@@ -692,6 +692,24 @@
         </div>
     </div>
 
+    <!-- Item Info Modal (Docente) -->
+    <div class="modal-overlay" id="itemInfoModal">
+        <div class="modal-content glass-panel" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3>Detalles del Elemento</h3>
+                <button onclick="closeItemInfoModal()" class="modal-close">&times;</button>
+            </div>
+            
+            <div id="itemInfoContent" style="margin-bottom: 20px; font-size: 0.95rem; line-height: 1.6;">
+                <!-- Filled dynamically via JS -->
+            </div>
+            
+            <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" onclick="closeItemInfoModal()" class="btn btn-primary">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Script assets loader -->
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://npmcdn.com/flatpickr/dist/l10n/es.js"></script>
